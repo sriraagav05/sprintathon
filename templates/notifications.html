@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}User Notifications{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto my-8">
+    <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 flex items-center">
+            <svg class="w-8 h-8 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-2.81A5.002 5.002 0 0117 9V7a1 1 0 00-1-1H8a1 1 0 00-1 1v2c0 2.21-1.2 4.14-3.595 5.19L3 17h5M15 17a3 3 0 11-6 0h6z"></path></svg>
+            Activity Notifications
+        </h1>
+
+        {% if notifications %}
+            <div class="space-y-4">
+                {% for notification in notifications %}
+                    {% set date_str = notification.timestamp.strftime('%b %d, %I:%M %p') %}
+
+                    {% if notification.category == 'sale' %}
+                        {% set icon_class = 'text-yellow-600 bg-yellow-50' %}
+                        {% set icon = '💰' %}
+                    {% elif notification.category == 'badge' %}
+                        {% set icon_class = 'text-green-600 bg-green-50' %}
+                        {% set icon = '🏆' %}
+                    {% else %}
+                        {% set icon_class = 'text-blue-600 bg-blue-50' %}
+                        {% set icon = '💬' %}
+                    {% endif %}
+
+                    <div class="p-4 rounded-lg flex items-start space-x-4 border border-gray-200 shadow-sm transition duration-150 hover:shadow-md {{ icon_class }}">
+                        <div class="flex-shrink-0 text-2xl mt-1">{{ icon }}</div>
+                        <div class="flex-grow">
+                            <p class="text-sm text-gray-500 mb-1">{{ date_str }}</p>
+                            <p class="text-gray-800 font-medium leading-relaxed">{{ notification.message | safe }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="p-8 text-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                <p class="text-lg font-medium text-gray-600">You're all caught up!</p>
+                <p class="text-gray-500 mt-2">No new activity notifications to display yet.</p>
+            </div>
+        {% endif %}
+
+        <div class="mt-8 pt-6 border-t border-gray-200 flex flex-col sm:flex-row justify-between space-y-4 sm:space-y-0 sm:space-x-4">
+            <a href="{{ url_for('dashboard') }}" class="flex items-center justify-center bg-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-gray-300 transition duration-150">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-10v10a1 1 0 001 1h3M14 6l-2-2-2 2"></path></svg>
+                Go to Dashboard
+            </a>
+            <a href="{{ url_for('loan_simulator') }}" class="flex items-center justify-center bg-green-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 transition duration-150">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m0 0l.9 3H19l-.9-3h-2m-6 0a2 2 0 11-4 0h4zM16 9h2a2 2 0 012 2v6h-4V9z"></path></svg>
+                Register New Land
+            </a>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+

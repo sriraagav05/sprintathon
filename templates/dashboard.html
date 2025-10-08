@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Crop Management{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-4 md:p-8">
+    <div class="flex flex-col md:flex-row gap-8">
+
+        <div class="w-full md:w-2/3 space-y-8">
+            <h1 class="text-3xl font-bold text-gray-800 border-b pb-2">Your Crop Passbook</h1>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-500">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4 flex items-center">
+                    🌱 Plant New Crop
+                </h2>
+                <form action="{{ url_for('create_crop') }}" method="POST" class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="sm:col-span-2">
+                            <label for="crop_name" class="block text-sm font-medium text-gray-700">Crop Name</label>
+                            <input type="text" id="crop_name" name="crop_name" required placeholder="e.g., Wheat, Rice, Cotton"
+                                class="mt-1 w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500">
+                        </div>
+                        <div>
+                            <label for="initial_stage" class="block text-sm font-medium text-gray-700">Initial Stage</label>
+                            <select id="initial_stage" name="initial_stage" required
+                                class="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white focus:ring-green-500 focus:border-green-500">
+                                <option value="Seed">Seed (Just Planted)</option>
+                                <option value="Sprout">Sprout (Emerging)</option>
+                                <option value="Plant">Plant (Established)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 text-white font-semibold py-2 rounded-lg hover:bg-green-700 transition duration-150 shadow-md">
+                        Start Planting
+                    </button>
+                </form>
+            </div>
+
+            <div class="space-y-6">
+                {% if crops_data %}
+                    {% for item in crops_data %}
+                        {% set crop = item.crop %}
+                        {% set real_time_stage = item.real_time_stage %}
+                        {% set is_check_in_available = item.is_check_in_available %}
+
+                        {% set status_color = 'border-green-500 bg-green-50' if crop.status == 'Green' %}
+                        {% set status_color = 'border-yellow-500 bg-yellow-50' if crop.status == 'Yellow' %}
+                        {% set status_color = 'border-red-500 bg-red-50' if crop.status == 'Red' %}
+
+                        <div id="crop-card-{{ crop.id }}" class="bg-white p-5 rounded-xl shadow-lg border-l-4 {{ status_color }}">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-2xl font-bold text-gray-900">{{ crop.name }}</h3>
+                                    <p class="text-sm text-gray-500">Planted: {{ crop.planted_date.strftime('%Y-%m-%d') }}</p>
+                                </div>
+                                <div class="text-right">
+                                    {% set status_text = "Healthy" if crop.status == 'Green' %}
+                                    {% set status_text = "Warning" if crop.status == 'Yellow' %}
+                                    {% set status_text = "Critical" if crop.status == 'Red' %}
+                                    {% set text_color = "text-green-600" if crop.status == 'Green' %}
+                                    {% set text_color = "text-yellow-600" if crop.status == 'Yellow' %}
+                                    {% set text_color = "text-red-600" if crop.status == 'Red' %}
+
+                                    <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full {{ text_color }} bg-white border border-gray-200 shadow-sm">
+                                        Status: {{ status_text }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div class="p-2 bg-gray-50 rounded-lg text-center">
+                                    <p class="font-medium text-gray-500">Real-Time Stage</p>
+                                    <p class="font-bold text-gray-800">{{ real_time_stage }}</p>
+                                </div>
+                                <div class="p-2 bg-gray-50 rounded-lg text-center">
+                                    <p class="font-medium text-gray-500">Simulated Stage</p>
+                                    <p class="font-bold text-indigo-600">{{ crop.growth_stage }}</p>
+                                </div>
+                                <div class="p-2 bg-gray-50 rounded-lg text-center">
+                                    <p class="font-medium text-gray-500">Soil Type</p>
+                                    <p class="font-bold text-gray-800">{{ crop.soil_type }}</p>
+                                </div>
+                                <div class="p-2 bg-gray-50 rounded-lg text-center">
+                                    <p class="font-medium text-gray-500">Disease</p>
+                                    <p class="font-bold {{ 'text-red-600' if crop.disease != 'None' else 'text-green-600' }}">
+                                        {{ crop.disease }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="mt-6 flex flex-wrap gap-3">
+                                <a href="{{ url_for('simulate_page', crop_id=crop.id) }}" class="bg-indigo-500 text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-indigo-600 transition duration-150 flex items-center shadow-md">
+                                    ⏩ Simulate Growth
+                                </a>
+
+                                <button onclick="handleCheckIn('{{ crop.id }}')"
+                                    id="check-in-btn-{{ crop.id }}"
+                                    class="text-sm font-medium py-2 px-4 rounded-lg transition duration-150 flex items-center shadow-md
+                                    {% if is_check_in_available %} bg-yellow-500 text-white hover:bg-yellow-600 {% else %} bg-gray-200 text-gray-600 cursor-not-allowed {% endif %}"
+                                    {% if not is_check_in_available %} disabled {% endif %}>
+                                    <span id="check-in-spinner-{{ crop.id }}" class="hidden animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                                    🌿 Daily Check-in (+5 pts)
+                                </button>
+
+                                <a href="{{ url_for('qr_code', id=crop.id) }}" target="_blank" class="bg-gray-700 text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-gray-800 transition duration-150 flex items-center shadow-md">
+                                    QR Code
+                                </a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center p-8 bg-gray-100 rounded-xl">
+                        <p class="text-lg text-gray-600 font-medium">You haven't planted any crops yet! Use the form above to start your first field entry.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+        <div class="w-full md:w-1/3 space-y-8">
+
+            <div class="bg-white p-6 rounded-xl shadow-xl border-t-4 border-blue-500">
+                <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    📝 Farm To-Do List
+                </h2>
+
+                <form id="todo-form" class="flex gap-2 mb-4">
+                    <input type="text" id="todo-input" required placeholder="Add new task (e.g., Fertilize plot B)"
+                        class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                    <button type="submit" class="bg-blue-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-150 shadow-md">
+                        Add
+                    </button>
+                </form>
+
+                <ul id="todo-list" class="space-y-2">
+                    {% for todo in todo_items %}
+                        {% set text_classes = 'line-through text-gray-500' if todo.done else 'text-gray-700' %}
+                        <li id="todo-item-{{ todo.id }}" class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border-l-4 border-gray-200">
+                            <span class="flex-grow {{ text_classes }} cursor-pointer"
+                                onclick="toggleTodo('{{ todo.id }}')">
+                                {{ todo.text }}
+                            </span>
+                            <button onclick="deleteTodo('{{ todo.id }}')"
+                                class="text-red-500 hover:text-red-700 ml-3 transition duration-150">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </li>
+                    {% else %}
+                        <li id="no-todos" class="text-center text-gray-500 text-sm p-4 bg-gray-100 rounded-lg">All tasks complete! Add a new one.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="bg-indigo-600 text-white p-6 rounded-xl shadow-xl">
+                <h2 class="text-2xl font-bold mb-2">Your Profile</h2>
+                <div class="flex justify-between items-center py-2 border-b border-indigo-400">
+                    <p class="text-lg font-medium">Current Points:</p>
+                    <p id="user-points" class="text-3xl font-extrabold">{{ current_user.points }}</p>
+                </div>
+                <div class="mt-4">
+                    <p class="text-lg font-medium mb-2">Badges Earned:</p>
+                    <div class="flex flex-wrap gap-2">
+                        {% for badge in badges %}
+                            <span class="bg-indigo-400 text-indigo-900 text-xs font-semibold px-3 py-1 rounded-full shadow-sm">
+                                🏅 {{ badge }}
+                            </span>
+                        {% else %}
+                            <span class="text-indigo-200 text-sm">No badges yet. Harvest a crop to earn one!</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-xl border-t-4 border-indigo-500">
+                <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <svg class="w-6 h-6 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path></svg>
+                    Top Farmers Leaderboard
+                </h2>
+                <ul class="space-y-3">
+                    {% for user in leaderboard %}
+                        <li class="flex justify-between items-center p-2 rounded-lg {% if user.id == current_user.id %} bg-yellow-50 border-l-4 border-yellow-500 {% else %} border-b border-gray-100 {% endif %}">
+                            <span class="font-semibold text-gray-700">{{ loop.index }}. {{ user.username }}</span>
+                            <span class="text-indigo-600 font-bold">{{ user.points }} pts</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // EXISTING Daily Check-in Logic (Keep this)
+    window.handleCheckIn = function(cropId) {
+        const button = document.getElementById(`check-in-btn-${cropId}`);
+        const spinner = document.getElementById(`check-in-spinner-${cropId}`);
+        const userPointsElement = document.getElementById('user-points');
+
+        if (button) button.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        fetch(`/api/check_in/${cropId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json().then(data => ({ status: response.status, body: data })))
+        .then(({ status, body }) => {
+            if (status === 200) {
+                if (body.message.includes('+5 Points')) {
+                    if (userPointsElement) userPointsElement.textContent = body.new_points;
+                    if (button) {
+                        button.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'text-white');
+                        button.classList.add('bg-gray-200', 'text-gray-600', 'cursor-not-allowed');
+                        button.innerHTML = `<span id="check-in-spinner-${cropId}" class="hidden animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>Checked In Today!`;
+                    }
+                } else {
+                    if (button) {
+                         button.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'text-white');
+                         button.classList.add('bg-gray-200', 'text-gray-600', 'cursor-not-allowed');
+                         button.innerHTML = 'Checked In Today!';
+                    }
+                }
+            } else {
+                console.error(`Check-in Error: ${body.message}`);
+                if (button) {
+                    button.innerHTML = `Error: ${body.message.substring(0, 20)}...`;
+                    button.disabled = false;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Check-in failed:', error);
+            if (button) {
+                button.innerHTML = 'Connection Failed!';
+                button.disabled = false;
+            }
+        })
+        .finally(() => {
+            if (spinner) spinner.classList.add('hidden');
+        });
+    };
+
+
+    // --- NEW To-Do List JavaScript Logic ---
+
+    const todoForm = document.getElementById('todo-form');
+    const todoInput = document.getElementById('todo-input');
+    const todoList = document.getElementById('todo-list');
+
+    // Helper to create the list element
+    function createTodoElement(item) {
+        const li = document.createElement('li');
+        li.id = `todo-item-${item.id}`;
+        li.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-lg border-l-4 border-gray-200';
+
+        const textSpan = document.createElement('span');
+        textSpan.className = `flex-grow text-gray-700 cursor-pointer ${item.done ? 'line-through text-gray-500' : ''}`;
+        textSpan.textContent = item.text;
+        textSpan.onclick = () => toggleTodo(item.id);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'text-red-500 hover:text-red-700 ml-3 transition duration-150';
+        deleteBtn.onclick = () => deleteTodo(item.id);
+        deleteBtn.innerHTML = `
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        `;
+
+        li.appendChild(textSpan);
+        li.appendChild(deleteBtn);
+        return li;
+    }
+
+    // 1. Add New To-Do Item
+    todoForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const text = todoInput.value.trim();
+        if (text === '') return;
+
+        fetch('{{ url_for("add_todo") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text })
+        })
+        .then(response => response.json())
+        .then(item => {
+            // Remove the "No todos" message if it exists
+            const noTodos = document.getElementById('no-todos');
+            if (noTodos) noTodos.remove();
+
+            // Append the new item to the list
+            todoList.appendChild(createTodoElement(item));
+            todoInput.value = ''; // Clear the input
+        })
+        .catch(error => console.error('Error adding todo:', error));
+    });
+
+    // 2. Delete To-Do Item
+    window.deleteTodo = function(todoId) {
+        fetch(`{{ url_for("delete_todo", todo_id=0) }}`.replace('0', todoId), {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (response.ok) {
+                document.getElementById(`todo-item-${todoId}`).remove();
+
+                // If the list is empty, show the "No todos" message
+                if (todoList.children.length === 0) {
+                    const emptyMessage = document.createElement('li');
+                    emptyMessage.id = 'no-todos';
+                    emptyMessage.className = 'text-center text-gray-500 text-sm p-4 bg-gray-100 rounded-lg';
+                    emptyMessage.textContent = 'All tasks complete! Add a new one.';
+                    todoList.appendChild(emptyMessage);
+                }
+            } else {
+                response.json().then(data => console.error('Error deleting todo:', data.message));
+            }
+        })
+        .catch(error => console.error('Connection error during deletion:', error));
+    };
+
+    // 3. Toggle To-Do Item Completion Status
+    // In dashboard.html
+
+window.toggleTodo = function(todoId) {
+    fetch(`{{ url_for("toggle_todo", todo_id=0) }}`.replace('0', todoId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const itemElement = document.getElementById(`todo-item-${todoId}`);
+        if (itemElement) {
+            const textSpan = itemElement.querySelector('span');
+            if (data.done) {
+                // ... (Existing toggle classes logic) ...
+                textSpan.classList.add('line-through', 'text-gray-500');
+                textSpan.classList.remove('text-gray-700');
+
+                // --- NEW LINE TO UPDATE POINTS ---
+                const userPointsElement = document.getElementById('user-points');
+                if (userPointsElement && data.new_points) {
+                    userPointsElement.textContent = data.new_points;
+                }
+            } else {
+                // ... (Existing untoggle classes logic) ...
+                textSpan.classList.remove('line-through', 'text-gray-500');
+                textSpan.classList.add('text-gray-700');
+            }
+        }
+    })
+    .catch(error => console.error('Error toggling todo:', error));
+};
+
+</script>
+{% endblock %}

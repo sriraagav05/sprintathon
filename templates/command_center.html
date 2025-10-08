@@ -1,0 +1,621 @@
+{% extends "base.html" %}
+
+{% block title %}AgroVision Command Center{% endblock %}
+
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+        #map-container {
+            position: relative;
+            height: 85vh;
+            min-height: 750px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08), 0 0 1px rgba(0,0,0,0.1);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        #report-panel {
+            position: absolute;
+            top: 0;
+            right: -450px;
+            width: 420px;
+            max-width: 95%;
+            height: 100%;
+            background: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);
+            z-index: 1000;
+            transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: -20px 0px 60px rgba(0,0,0,0.15);
+            border-left: 1px solid #e2e8f0;
+        }
+
+        #report-panel.visible {
+            right: 0;
+        }
+
+        .loader {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid #ffffff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 0.8s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.5);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .scheme-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+
+        .scheme-card:hover {
+            border-left-color: #6366f1;
+            transform: translateX(4px);
+        }
+
+        .weather-banner-animated {
+            animation: slideDown 0.5s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .metric-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover::before {
+            transform: scaleX(1);
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 sm:p-6 lg:p-8">
+    <!-- Header Section -->
+    <div class="max-w-7xl mx-auto mb-8">
+        <div class="text-center space-y-3">
+            <div class="inline-flex items-center justify-center space-x-3 mb-2">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <h1 class="text-5xl font-black tracking-tight">
+                    <span class="gradient-text">AgroVision</span>
+                </h1>
+            </div>
+            <p class="text-lg text-slate-600 font-medium max-w-2xl mx-auto">
+                Advanced agricultural intelligence platform for data-driven farming decisions
+            </p>
+        </div>
+    </div>
+
+    <!-- Weather Alert Banner -->
+    <div id="weather-alert-banner" class="hidden weather-banner-animated max-w-7xl mx-auto mb-6 px-4">
+        <div class="p-5 rounded-2xl shadow-xl backdrop-blur-sm border-2 flex items-center justify-center space-x-4 transition-all duration-300">
+            <span id="weather-alert-icon" class="text-4xl drop-shadow-lg"></span>
+            <span id="weather-alert-text" class="font-semibold text-base md:text-lg"></span>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="max-w-7xl mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+            <!-- Map Section - Takes 3 columns -->
+            <div class="lg:col-span-3">
+                <div id="map-container" class="relative group">
+                    <div id="map"></div>
+
+                    <!-- Report Panel -->
+                    <div id="report-panel" class="flex flex-col">
+                        <!-- Panel Header -->
+                        <div class="relative p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                            <button id="close-panel-btn" class="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors text-white text-2xl font-light">
+                                &times;
+                            </button>
+                            <div class="flex items-center space-x-3 mb-2">
+                                <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 class="text-2xl font-bold">Land Analysis Report</h2>
+                                    <p class="text-indigo-100 text-sm">Comprehensive site evaluation</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex items-center space-x-2 text-indigo-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span id="report-coords" class="font-mono text-xs tracking-wide">...</span>
+                            </div>
+                        </div>
+
+                        <!-- Panel Content -->
+                        <div id="report-content" class="p-6 space-y-6 flex-grow overflow-y-auto bg-gradient-to-b from-slate-50 to-white">
+                            <div class="text-center py-16">
+                                <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                                    </svg>
+                                </div>
+                                <p class="text-slate-600 font-medium">Click on the map to select a location</p>
+                                <p class="text-slate-400 text-sm mt-2">Then click 'Analyze' to generate a comprehensive report</p>
+                            </div>
+                        </div>
+
+                        <!-- Panel Footer -->
+                        <div class="p-6 bg-white border-t border-slate-200">
+                            <button id="analyze-btn" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 flex items-center justify-center disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:shadow-none" disabled>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                <span id="analyze-btn-text">Analyze This Location</span>
+                                <div id="analyze-loader" class="loader hidden"></div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schemes Sidebar - Takes 1 column -->
+            <div class="lg:col-span-1">
+                <div class="sticky top-6">
+                    <div class="rounded-2xl shadow-xl border border-slate-200 bg-white overflow-hidden">
+                        <!-- Schemes Header -->
+                        <div class="p-6 bg-gradient-to-br from-green-500 to-emerald-600 text-white">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 class="text-xl font-bold">Government Schemes</h2>
+                                    <p class="text-green-100 text-xs">Financial support programs</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Schemes List -->
+                        <div id="schemes-list" class="p-4 space-y-3 max-h-[calc(85vh-120px)] overflow-y-auto bg-gradient-to-b from-slate-50 to-white">
+                            <div class="flex items-center justify-center py-8">
+                                <div class="animate-pulse flex flex-col items-center space-y-3">
+                                    <div class="w-10 h-10 bg-slate-200 rounded-full"></div>
+                                    <p class="text-sm text-slate-400">Loading schemes...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const map = L.map('map').setView([11.1271, 78.6569], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+        L.Control.geocoder().addTo(map);
+        L.control.locate().addTo(map);
+        const reportPanel = document.getElementById('report-panel');
+        let selectionMarker = null;
+        let selectedCoords = null;
+        let chartInstance = null; // Use a dedicated variable for Chart.js instance
+
+        function fetchAndDisplaySchemes() {
+            const listContainer = document.getElementById('schemes-list');
+
+            // FIX: Use Flask's url_for to correctly generate the static path.
+            const schemesUrl = "{{ url_for('static', filename='schemes.json') }}";
+
+            fetch(schemesUrl).then(response => response.json()).then(schemes => {
+                listContainer.innerHTML = '';
+                schemes.forEach(scheme => {
+                    const schemeHTML = `<div class="scheme-card p-4 bg-white rounded-xl border border-slate-200 hover:shadow-lg transition-all duration-300 cursor-pointer">
+                        <h4 class="font-bold text-slate-800 mb-2 flex items-center">
+                            <span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                            ${scheme.name}
+                        </h4>
+                        <p class="text-sm text-slate-600 leading-relaxed mb-3">${scheme.description}</p>
+                        <div class="flex items-start space-x-2 mb-3 p-2 bg-green-50 rounded-lg">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p class="text-xs text-green-800 font-medium">${scheme.benefit}</p>
+                        </div>
+                        <a href="${scheme.link}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors group">
+                            Learn More
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                        </a>
+                    </div>`;
+                    listContainer.innerHTML += schemeHTML;
+                });
+            }).catch(error => {
+                console.error("Error fetching schemes:", error);
+                listContainer.innerHTML = "<div class='text-center py-8'><p class='text-slate-500'>Could not load schemes. Please ensure 'static/schemes.json' exists.</p></div>";
+            });
+        }
+        fetchAndDisplaySchemes();
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => fetchWeatherForBanner(position.coords.latitude, position.coords.longitude),
+                (error) => updateWeatherBanner(null, "Could not retrieve local weather.")
+            );
+        }
+        function fetchWeatherForBanner(lat, lon) {
+            // Using the new simple API endpoint for the banner
+            fetch(`/api/get_current_weather?lat=${lat}&lon=${lon}`).then(response => response.json()).then(data => {
+                if (!data.error) updateWeatherBanner(data);
+            }).catch(e => updateWeatherBanner(null, "⚠️Failed to fetch live weather. Check server console for API key errors."));
+        }
+
+        // Helper to map OpenWeather ID to a simple icon
+        function getWeatherIcon(id) {
+            if (id >= 200 && id <= 232) return '⛈️'; // Thunderstorm
+            if (id >= 300 && id <= 531) return '🌧️'; // Drizzle/Rain
+            if (id >= 600 && id <= 622) return '❄️'; // Snow
+            if (id >= 701 && id <= 781) return '🌫️'; // Atmosphere
+            if (id === 800) return '☀️'; // Clear
+            if (id >= 801 && id <= 804) return '☁️'; // Clouds
+            return '❓';
+        }
+
+        function updateWeatherBanner(weather, errorMessage = "") {
+            const banner = document.getElementById('weather-alert-banner');
+            const iconEl = document.getElementById('weather-alert-icon');
+            const textEl = document.getElementById('weather-alert-text');
+
+            // Reset classes
+            banner.className = 'hidden weather-banner-animated max-w-7xl mx-auto mb-6 px-4';
+
+            if (errorMessage || !weather) {
+                textEl.textContent = errorMessage || "Failed to retrieve local weather.";
+                iconEl.textContent = '⚠️';
+                banner.classList.add('bg-yellow-100', 'text-yellow-800', 'border-yellow-200');
+                banner.classList.remove('hidden');
+                return;
+            }
+
+            // Logic based on OpenWeather API IDs
+            const isRain = weather.id >= 200 && weather.id <= 599;
+            const isHot = weather.temp > 35;
+            let alertText, bgColor, textColor, borderColor, icon;
+
+            if (isRain) {
+                alertText = `Weather Warning: Rain is active in your area (${weather.temp}°C).`;
+                bgColor = 'bg-gradient-to-r from-blue-100 to-cyan-100';
+                textColor = 'text-blue-800';
+                borderColor = 'border-blue-200';
+                icon = getWeatherIcon(weather.id);
+            }
+            else if (isHot) {
+                alertText = `Heat Alert: Extreme temperatures of ${weather.temp}°C detected. Protect your crops!`;
+                bgColor = 'bg-gradient-to-r from-orange-100 to-red-100';
+                textColor = 'text-orange-800';
+                borderColor = 'border-orange-200';
+                icon = '🔥';
+            } else {
+                alertText = `Live Weather in Your Area: ${weather.temp}°C, ${weather.description}.`;
+                bgColor = 'bg-gradient-to-r from-green-100 to-emerald-100';
+                textColor = 'text-green-800';
+                borderColor = 'border-green-200';
+                icon = getWeatherIcon(weather.id);
+            }
+
+            textEl.textContent = alertText;
+            iconEl.textContent = icon;
+            banner.classList.add(bgColor, textColor, borderColor);
+            banner.classList.remove('hidden');
+        }
+
+        const reportContent = document.getElementById('report-content');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const analyzeBtnText = document.getElementById('analyze-btn-text');
+        const analyzeLoader = document.getElementById('analyze-loader');
+
+        map.on('click', function(e) {
+            selectedCoords = e.latlng;
+            if (selectionMarker) {
+                selectionMarker.setLatLng(e.latlng);
+            }
+            else {
+                selectionMarker = L.marker(e.latlng).addTo(map);
+            }
+            document.getElementById('report-coords').textContent = `${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lng.toFixed(4)}`;
+            analyzeBtn.disabled = false;
+            reportContent.innerHTML = '<div class="text-center py-16"><div class="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center animate-pulse"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></div><p class="text-slate-700 font-semibold text-lg">Location Selected</p><p class="text-slate-500 text-sm mt-2">Click \'Analyze This Location\' to generate your report</p></div>';
+            reportPanel.classList.add('visible');
+        });
+        document.getElementById('close-panel-btn').addEventListener('click', () => { reportPanel.classList.remove('visible'); });
+        analyzeBtn.addEventListener('click', () => { if (selectedCoords) fetchReportData(selectedCoords.lat, selectedCoords.lng); });
+
+        function fetchReportData(lat, lon) {
+            analyzeBtnText.classList.add('hidden');
+            analyzeLoader.classList.remove('hidden');
+            analyzeBtn.disabled = true;
+
+            // Using the new detailed report API endpoint
+            fetch(`/api/get_land_report?lat=${lat}&lon=${lon}`).then(response => response.json()).then(data => {
+                if (data.error) throw new Error(data.error);
+                updateReportUI(data);
+            })
+            .catch(error => {
+                reportContent.innerHTML = `<div class="p-6 text-center"><div class="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div><p class="text-red-600 font-semibold">Error generating report</p><p class="text-slate-500 text-sm mt-2">Could not retrieve land data. ${error.message}</p></div>`;
+            })
+            .finally(() => {
+                analyzeBtnText.classList.remove('hidden');
+                analyzeLoader.classList.add('hidden');
+                analyzeBtn.disabled = false;
+            });
+        }
+
+        // Function to create or update the Chart.js graph
+        function drawRainfallChart(data) {
+            const ctx = document.getElementById('rainfallChart').getContext('2d');
+
+            // Destroy existing chart instance to prevent errors
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.historical_rainfall.months,
+                    datasets: [
+                        {
+                            label: 'Last 12 Months',
+                            data: data.historical_rainfall.last_12_months,
+                            backgroundColor: 'rgba(79, 70, 229, 0.8)',
+                            borderRadius: 6,
+                            borderWidth: 0
+                        },
+                        {
+                            label: '10-Year Average',
+                            data: data.historical_rainfall.ten_year_average,
+                            backgroundColor: 'rgba(156, 163, 175, 0.5)',
+                            borderRadius: 6,
+                            borderWidth: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15,
+                                font: {
+                                    size: 11,
+                                    weight: '600'
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.1)'
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+
+        function updateReportUI(data) {
+            const getLevelClasses = (level) => {
+                if (level === 'good') return { bg: 'bg-gradient-to-br from-green-50 to-emerald-50', text: 'text-green-800', badge: 'bg-green-500', border: 'border-green-200' };
+                if (level === 'average') return { bg: 'bg-gradient-to-br from-yellow-50 to-amber-50', text: 'text-yellow-800', badge: 'bg-yellow-500', border: 'border-yellow-200' };
+                return { bg: 'bg-gradient-to-br from-red-50 to-rose-50', text: 'text-red-800', badge: 'bg-red-500', border: 'border-red-200' };
+            };
+
+            const overallClasses = getLevelClasses(data.overall_rating.includes('Excellent') || data.overall_rating.includes('Good') ? 'good' : (data.overall_rating.includes('Challenging') ? 'poor' : 'average'));
+            const nutrientClasses = getLevelClasses(data.analysis.nutrients.level);
+            const waterClasses = getLevelClasses(data.analysis.water.level);
+            const resilienceClasses = getLevelClasses(data.climate_resilience.level);
+
+            // Generate Crop Suitability List
+            const suitabilityList = data.crop_suitability.map(crop => {
+                const color = crop.score > 80 ? 'bg-green-100 text-green-700 border-green-200' :
+                              crop.score > 60 ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                              'bg-red-100 text-red-700 border-red-200';
+                return `<div class="p-3 rounded-lg ${color} flex justify-between items-center text-sm font-semibold">
+                            <span>${crop.name}</span>
+                            <span>${crop.score}% Suitability</span>
+                        </div>`;
+            }).join('');
+
+            const reportHTML = `
+            <div class="metric-card p-6 rounded-2xl text-center ${overallClasses.bg} border-2 ${overallClasses.border} shadow-lg">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full ${overallClasses.badge} mb-3 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <h3 class="font-bold text-lg ${overallClasses.text} mb-1">Overall Assessment</h3>
+                <p class="text-3xl font-black ${overallClasses.text}">${data.overall_rating}</p>
+                <p class="text-sm text-slate-500 mt-2">Soil Type: <strong>${data.soil_type}</strong></p>
+            </div>
+
+            <div class="space-y-4">
+                <h3 class="font-bold text-slate-800 text-lg flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center mr-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                    </span>
+                    Expert Soil Analysis
+                </h3>
+
+                <div class="p-4 rounded-xl ${nutrientClasses.bg} border ${nutrientClasses.border} shadow-sm">
+                    <div class="flex items-center mb-2">
+                        <span class="w-3 h-3 rounded-full ${nutrientClasses.badge} mr-3 shadow-md"></span>
+                        <strong class="${nutrientClasses.text} font-bold">Nutrient Profile</strong>
+                    </div>
+                    <p class="text-sm pl-6 ${nutrientClasses.text} leading-relaxed">${data.analysis.nutrients.text}</p>
+                </div>
+
+                <div class="p-4 rounded-xl ${waterClasses.bg} border ${waterClasses.border} shadow-sm">
+                    <div class="flex items-center mb-2">
+                        <span class="w-3 h-3 rounded-full ${waterClasses.badge} mr-3 shadow-md"></span>
+                        <strong class="${waterClasses.text} font-bold">Water Availability</strong>
+                    </div>
+                    <p class="text-sm pl-6 ${waterClasses.text} leading-relaxed">${data.analysis.water.text}</p>
+                </div>
+
+                <div class="p-4 rounded-xl ${resilienceClasses.bg} border ${resilienceClasses.border} shadow-sm">
+                    <div class="flex items-center mb-2">
+                        <span class="w-3 h-3 rounded-full ${resilienceClasses.badge} mr-3 shadow-md"></span>
+                        <strong class="${resilienceClasses.text} font-bold">Climate Resilience (${data.climate_resilience.rating})</strong>
+                    </div>
+                    <p class="text-sm pl-6 ${resilienceClasses.text} leading-relaxed">${data.climate_resilience.recommendation}</p>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <h3 class="font-bold text-slate-800 text-lg flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center mr-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13V6a2 2 0 012-2h14a2 2 0 012 2v7m-3 0v7a2 2 0 01-2 2H8a2 2 0 01-2-2v-7m12 0h.01M16 13a4 4 0 01-4 4H8a4 4 0 01-4-4h8z" />
+                        </svg>
+                    </span>
+                    Best Crop Matchmaker
+                </h3>
+                <div class="space-y-2">
+                    ${suitabilityList}
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <h3 class="font-bold text-slate-800 text-lg flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center mr-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </span>
+                    Land Value Estimation (per Acre)
+                </h3>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 text-center">
+                        <p class="text-xs text-slate-500 font-semibold mb-2">5 Years Ago</p>
+                        <p class="font-bold text-lg text-slate-700">₹${data.land_value.past.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div class="p-4 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105 text-center">
+                        <p class="text-xs font-bold mb-2 opacity-90">Current Value</p>
+                        <p class="font-black text-xl">₹${data.land_value.present.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div class="p-4 rounded-xl bg-green-100 border border-green-200 text-center">
+                        <p class="text-xs text-green-700 font-semibold mb-2">5 Yr Forecast</p>
+                        <p class="font-bold text-lg text-green-700">₹${data.land_value.future.toLocaleString('en-IN')}</p>
+                        <p class="text-xs text-green-600 font-bold mt-1">↗ Growth</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <h3 class="font-bold text-slate-800 text-lg flex items-center">
+                    <span class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center mr-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                        </svg>
+                    </span>
+                    Rainfall Analysis
+                </h3>
+
+                <div class="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-100 shadow-sm">
+                    <p class="text-sm text-center text-blue-800 font-medium leading-relaxed">${data.historical_rainfall.summary}</p>
+                </div>
+
+                <div class="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <canvas id="rainfallChart"></canvas>
+                </div>
+            </div>`;
+            reportContent.innerHTML = reportHTML;
+
+            // Draw the chart after updating the HTML
+            drawRainfallChart(data);
+
+        }
+    });
+</script>
+{% endblock %}

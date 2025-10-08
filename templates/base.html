@@ -1,0 +1,383 @@
+{% block head %}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}AgroVision App{% endblock %}</title>
+<!-- Load Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8fafc; /* slate-50 */
+    }
+
+    .card-shadow-lg {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-gradient {
+        background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
+    }
+
+    .flash-card {
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        font-weight: 500;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Custom styles for Chatbot Panel */
+    #chatbot-panel {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 350px;
+        height: 450px;
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.2);
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        transform: translateY(10px);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s;
+    }
+
+    #chatbot-panel.visible {
+        opacity: 1;
+        transform: translateY(0);
+        visibility: visible;
+    }
+
+    /* Style for the floating chat button */
+    #chat-toggle-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 10000;
+        transition: transform 0.3s ease, box-shadow 0.3s ease; /* Added box-shadow transition */
+    }
+
+    .chat-bubble {
+        animation: chatPulse 2s infinite;
+    }
+    @keyframes chatPulse {
+        0% { box-shadow: 0 0 0 0 rgba(50, 190, 100, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(50, 190, 100, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(50, 190, 100, 0); }
+    }
+
+</style>
+{% endblock %}
+
+<body class="min-h-screen">
+    <nav class="nav-gradient card-shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <a href="{{ url_for('dashboard') }}" class="text-2xl font-extrabold text-white transition duration-150 tracking-wider hover:text-indigo-200">
+                        🌱 AgroVision
+                    </a>
+                </div>
+                <div class="flex items-center space-x-2 md:space-x-4">
+                    {% if current_user.is_authenticated %}
+
+                        <!-- Navigation Links - Clean, Pill Style -->
+                        <a href="{{ url_for('dashboard') }}" class="text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition">Dashboard</a>
+                        <a href="{{ url_for('command_center') }}" class="text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition">🗺️ Center</a>
+                        <a href="{{ url_for('scan') }}" class="text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition">🔍 Scan</a>
+                        <a href="{{ url_for('simulate_page') }}" class="text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition">⏱️ Simulate</a>
+                        <a href="{{ url_for('loan_simulator') }}" class="text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition">💰 Finance</a>
+                        <a href="{{ url_for('shop') }}" class="text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition">🛒 Shop</a>
+
+                        <!-- Notifications Icon -->
+                        <a href="{{ url_for('notifications_page') }}" class="text-white hover:bg-indigo-700 p-2 rounded-full transition">
+                             🔔
+                        </a>
+
+                        <!-- Points Badge - Highlighted -->
+                        <span class="bg-green-400 text-green-900 text-sm font-extrabold py-1 px-3 rounded-full shadow-md ml-4">
+                            {{ current_user.points }} pts
+                        </span>
+
+                        <!-- Logout Button -->
+                        <a href="{{ url_for('logout') }}" class="bg-red-500 text-white hover:bg-red-600 px-3 py-1.5 rounded-lg text-sm font-medium transition shadow-md">
+                            Logout
+                        </a>
+                    {% else %}
+                        <!-- Auth Links -->
+                        <a href="{{ url_for('login') }}" class="text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-sm font-medium transition">Login</a>
+                        <a href="{{ url_for('register') }}" class="bg-green-500 text-white hover:bg-green-600 px-3 py-1.5 rounded-lg text-sm font-medium transition shadow-md">
+                            Register
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages Area -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-card {% if category == 'success' %}bg-green-100 text-green-800 border border-green-200{% elif category == 'danger' %}bg-red-100 text-red-800 border border-red-200{% elif category == 'info' %}bg-blue-100 text-blue-800 border border-blue-200{% elif category == 'warning' %}bg-yellow-100 text-yellow-800 border border-yellow-200{% endif %}" role="alert">
+                        {{ message | safe }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% if current_user.is_authenticated %}
+    <!-- Chatbot Floating Button (NEW FLOATING TAB STYLE) -->
+    <button id="chat-toggle-btn"
+            class="bg-green-600 text-white flex items-center justify-center text-base font-semibold shadow-xl hover:bg-green-700 focus:outline-none chat-bubble
+                   w-auto px-5 py-3 rounded-xl hover:scale-[1.05] transition transform duration-300 space-x-2">
+        <span>Ask AgroBot</span>
+        <span class="text-2xl">🤖</span>
+    </button>
+
+    <!-- Chatbot Panel -->
+    <div id="chatbot-panel" class="hidden">
+        <!-- Header -->
+        <div class="p-4 nav-gradient text-white rounded-t-lg flex justify-between items-center">
+            <h3 class="text-lg font-bold">AgroBot Assistant</h3>
+            <button onclick="toggleChat()" class="text-xl font-light hover:text-indigo-200">&times;</button>
+        </div>
+
+        <!-- Messages Area -->
+        <div id="chat-messages" class="flex-grow p-4 space-y-4 overflow-y-auto bg-gray-50">
+            <!-- Initial Greeting -->
+            <div class="flex justify-start">
+                <div class="bg-indigo-100 p-3 rounded-lg max-w-[80%] text-sm text-indigo-800 shadow-sm">
+                    Hello! I'm AgroBot. **Upload an image for analysis** or ask me any farming question!
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area (Updated for Image Upload) -->
+        <div class="p-4 border-t border-gray-200 bg-white">
+            <!-- New: Analysis Type Selection -->
+            <div id="analysis-buttons" class="flex space-x-2 mb-3">
+                <button type="button" data-intent="soil"
+                        class="analysis-btn w-1/2 text-sm font-semibold py-2 px-3 rounded-lg border border-yellow-400 bg-yellow-50 text-yellow-800 hover:bg-yellow-100 transition duration-150">
+                    🪨 Soil Analysis
+                </button>
+                <button type="button" data-intent="disease"
+                        class="analysis-btn w-1/2 text-sm font-semibold py-2 px-3 rounded-lg border border-red-400 bg-red-50 text-red-800 hover:bg-red-100 transition duration-150">
+                    🌿 Leaf Disease
+                </button>
+            </div>
+
+            <form id="chat-form" class="flex space-x-2">
+                <!-- Hidden File Input (Shared) -->
+                <input type="file" id="image-upload" accept="image/*" class="hidden">
+                <!-- Hidden Field to Track Intent -->
+                <input type="hidden" id="analysis-intent-hidden" name="analysis_type" value="">
+
+                <div class="flex-grow">
+                    <input type="text" id="chat-input" placeholder="Enter message or use buttons above..."
+                           class="w-full p-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-sm" required>
+
+                    <!-- Image Preview/Clear Box -->
+                    <div id="image-preview-box" class="hidden mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-between text-sm">
+                        <span id="image-file-name" class="text-indigo-700 truncate mr-2"></span>
+                        <button type="button" id="clear-image-btn" class="text-indigo-500 hover:text-indigo-700 transition font-bold text-lg leading-none">&times;</button>
+                    </div>
+                </div>
+
+                <button type="submit" id="send-btn"
+                        class="bg-green-500 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-green-600 transition disabled:bg-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const chatPanel = document.getElementById('chatbot-panel');
+        const chatToggleBtn = document.getElementById('chat-toggle-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        let isChatOpen = false;
+
+        // IMAGE ELEMENTS
+        const imageUpload = document.getElementById('image-upload');
+        const imagePreviewBox = document.getElementById('image-preview-box');
+        const clearImageBtn = document.getElementById('clear-image-btn');
+        const imageFileName = document.getElementById('image-file-name');
+        const analysisButtons = document.querySelectorAll('.analysis-btn');
+        const analysisIntentHidden = document.getElementById('analysis-intent-hidden'); // The hidden field
+
+        let attachedImageBase64 = null;
+        let attachedImageMimeType = null;
+
+        function toggleChat() {
+            if (isChatOpen) {
+                chatPanel.classList.remove('visible');
+                chatToggleBtn.style.transform = 'translateY(0)';
+                setTimeout(() => chatPanel.classList.add('hidden'), 300);
+            } else {
+                chatPanel.classList.remove('hidden');
+                chatPanel.classList.add('visible');
+                // Adjust transform based on the new button size (450px panel + 24px padding + button height ~ 480px)
+                chatToggleBtn.style.transform = 'translateY(-480px)';
+            }
+            isChatOpen = !isChatOpen;
+        }
+
+        function appendMessage(sender, text) {
+            const messageContainer = document.createElement('div');
+            messageContainer.className = sender === 'user' ? 'flex justify-end' : 'flex justify-start';
+
+            const bubble = document.createElement('div');
+            bubble.className = `p-3 rounded-lg max-w-[80%] text-sm shadow-md transition-colors duration-200 ${
+                sender === 'user'
+                    ? 'bg-green-500 text-white rounded-br-none'
+                    : 'bg-white text-gray-800 rounded-tl-none border border-gray-200'
+            }`;
+            bubble.innerHTML = text;
+            messageContainer.appendChild(bubble);
+            chatMessages.appendChild(messageContainer);
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return bubble;
+        }
+
+        chatToggleBtn.addEventListener('click', toggleChat);
+
+        // --- Image/Intent Handling Logic ---
+
+        // 1. Dedicated button click sets intent and opens file chooser
+        analysisButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                analysisIntentHidden.value = button.dataset.intent; // Set hidden intent
+                imageUpload.click(); // Trigger file selection
+            });
+        });
+
+        // 2. Clear image button resets state
+        clearImageBtn.addEventListener('click', () => {
+            attachedImageBase64 = null;
+            attachedImageMimeType = null;
+            analysisIntentHidden.value = ''; // Clear intent
+            imageUpload.value = null; // Clear file input value
+            imagePreviewBox.classList.add('hidden');
+        });
+
+        // 3. File selection reads file and updates UI
+        imageUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                clearImageBtn.click();
+                return;
+            }
+
+            if (!file.type.startsWith('image/')) {
+                console.error("Please upload a valid image file.");
+                imageUpload.value = null;
+                analysisIntentHidden.value = ''; // Clear intent on failure
+                return;
+            }
+
+            imageFileName.textContent = file.name;
+            imagePreviewBox.classList.remove('hidden');
+            attachedImageMimeType = file.type;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                attachedImageBase64 = e.target.result.split(',')[1];
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // --- Form Submission Logic ---
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = chatInput.value.trim();
+            const analysisType = analysisIntentHidden.value;
+
+            // Only proceed if there's text, OR an image is attached
+            if (!message && !attachedImageBase64) return;
+
+            // 1. Display user message (and image if present)
+            let userMessageHtml = message;
+
+            if (attachedImageBase64) {
+                const intentText = analysisType === 'soil' ? ' (SOIL ANALYSIS)' : analysisType === 'disease' ? ' (LEAF DISEASE CHECK)' : '';
+                userMessageHtml = `**Request: ${message || 'Image Analysis'}** ${intentText} <br>`;
+
+                // Reconstruct the full data URL for display
+                const dataUrl = `data:${attachedImageMimeType};base64,${attachedImageBase64}`;
+                userMessageHtml += `<img src="${dataUrl}" class="mt-2 rounded-lg max-w-full max-h-40 object-contain shadow-md" alt="Uploaded Image">`;
+            }
+
+            appendMessage('user', userMessageHtml);
+
+            // Prepare payload
+            const payload = {
+                message: message,
+                image_data: attachedImageBase64, // Send Base64 image data
+                mime_type: attachedImageMimeType,
+                analysis_type: analysisType // New: Send the explicit intent
+            };
+
+            // Clear input fields and state
+            chatInput.value = '';
+            clearImageBtn.click(); // Clears image state, B64 variable, and hidden intent
+
+            // 2. Display loading indicator
+            sendBtn.disabled = true;
+            const loadingBubble = appendMessage('bot', `<div class="animate-pulse flex space-x-2 items-center">
+                <div class="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                <div class="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                <div class="w-2 h-2 bg-indigo-400 rounded-full"></div>
+            </div>`);
+
+            // 3. Send message to Flask API
+            fetch("{{ url_for('chatbot') }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 4. Update the loading bubble with the actual response
+                let replyText = data.reply || 'Sorry, I ran into an error.';
+                // Simple formatting for numbered lists
+                replyText = replyText.replace(/(\d+\.)/g, '<br>$1');
+                loadingBubble.innerHTML = replyText;
+            })
+            .catch(error => {
+                console.error('Chatbot API Error:', error);
+                loadingBubble.innerHTML = 'Sorry, the server connection failed.';
+            })
+            .finally(() => {
+                sendBtn.disabled = false;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        });
+
+        // Initialize chat state on load
+        if ("{{ current_user.is_authenticated }}") {
+            // Check if the panel should stay open
+            if (chatPanel.classList.contains('visible')) {
+                 chatToggleBtn.style.transform = 'translateY(-480px)';
+            }
+        }
+    </script>
+    {% endif %}
+</body>

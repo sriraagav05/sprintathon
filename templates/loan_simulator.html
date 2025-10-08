@@ -1,0 +1,696 @@
+{% extends "base.html" %}
+
+{% block title %}Finance Support{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto bg-white shadow-2xl rounded-xl p-8 space-y-8 border-t-8 border-green-600 my-8">
+    <h1 class="text-3xl font-bold text-green-700 text-center">Financial Support & AI Underwriting</h1>
+    <p class="text-center text-gray-500">Financial Verification & Recommendation Assistant with Multi-Party Integration</p>
+
+    <!-- NEW: FARM REGISTRATION FORM -->
+    <div id="farm-registration-section" class="space-y-4 border-b border-green-200 pb-6">
+        <h2 class="text-xl font-semibold text-green-700 mb-4 border-l-4 border-green-500 pl-3">0. Register New Farm Land</h2>
+        <form id="create-farm-form" action="{{ url_for('create_farm') }}" method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-green-50 p-4 rounded-lg">
+            <input type="text" name="farm_name" class="p-2 border border-green-300 rounded-md focus:ring-green-500 focus:border-green-500 col-span-2" placeholder="Farm Name (e.g., North Field)" required>
+            <input type="number" name="area_acres" class="p-2 border border-green-300 rounded-md focus:ring-green-500 focus:border-green-500" min="1" step="0.1" placeholder="Area (Acres)" required>
+            <button type="submit" class="bg-indigo-600 text-white font-semibold py-2 rounded-md transition duration-150 hover:bg-indigo-700">
+                Register Land
+            </button>
+        </form>
+        {% if not farms %}
+        <p class="text-sm text-red-500 text-center">Please register your land above to begin the loan analysis.</p>
+        {% endif %}
+    </div>
+
+    <!-- EXISTING FARM SELECTION -->
+    <div class="space-y-4 border-b border-green-200 pb-6">
+        <h2 class="text-xl font-semibold text-green-700 mb-4 border-l-4 border-green-500 pl-3">1. Select Farm for Analysis</h2>
+        <select id="farm-selector" class="w-full p-3 border border-green-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+            <option value="" disabled selected>--- Choose an Existing Farm ---</option>
+            {% for farm in farms %}
+            <option
+                value="{{ farm.id }}"
+                data-area="{{ farm.area_acres }}"
+                data-name="{{ farm.name }}"
+                data-crop="Cotton"
+                data-insurance="Pending"
+            >
+                {{ farm.name }} ({{ farm.area_acres }} Acres) - Status: {{ farm.loan_status }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+
+    <div id="goal-selection-section" class="space-y-4 border-b border-green-200 pb-6">
+        <h2 class="text-xl font-semibold text-green-700 mb-4 border-l-4 border-green-500 pl-3">2. Select Your Primary Goal</h2>
+        <div id="goal-selector-box" class="p-4 bg-yellow-50 rounded-lg border border-yellow-300">
+            <p class="font-semibold text-yellow-800 mb-3">What are you primarily interested in applying for today?</p>
+            <div class="flex flex-wrap gap-4 product-selector">
+
+                <input type="radio" id="goal-loan" name="primary_goal" value="Loan" class="hidden" onchange="handleGoalSelection()">
+                <label for="goal-loan" class="flex items-center px-4 py-2 border-2 border-green-400 text-green-800 rounded-full cursor-pointer transition duration-150 hover:bg-green-200">
+                    Loan 🏦
+                </label>
+
+                <input type="radio" id="goal-insurance" name="primary_goal" value="Insurance" class="hidden" onchange="handleGoalSelection()">
+                <label for="goal-insurance" class="flex items-center px-4 py-2 border-2 border-green-400 text-green-800 rounded-full cursor-pointer transition duration-150 hover:bg-green-200">
+                    Insurance 🛡️
+                </label>
+
+                <input type="radio" id="goal-fund" name="primary_goal" value="Govt. Fund" class="hidden" onchange="handleGoalSelection()">
+                <label for="goal-fund" class="flex items-center px-4 py-2 border-2 border-green-400 text-green-800 rounded-full cursor-pointer transition duration-150 hover:bg-green-200">
+                    Government Fund 💰
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="analysis-input-section" class="disabled-overlay space-y-4 border-b border-green-200 pb-6">
+        <h2 class="text-xl font-semibold text-green-700 mb-4 border-l-4 border-green-500 pl-3">3. AI Analysis Data (Review & Simulate)</h2>
+        <form id="ai-analysis-form" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <!-- These are now dynamic inputs populated by JS based on selection -->
+            <input type="hidden" id="selected_farm_id">
+            <input type="text" id="farm_name_display" class="p-2 border border-green-300 rounded-md bg-gray-100 focus:ring-green-500 focus:border-green-500 col-span-2" placeholder="Farm Name" required disabled>
+            <input type="number" id="crop_area" class="p-2 border border-green-300 rounded-md bg-gray-100 focus:ring-green-500 focus:border-green-500" min="1" step="0.1" placeholder="Area (Acres)" required disabled>
+
+            <!-- These inputs allow the user to simulate/override analysis conditions -->
+            <input type="text" id="crop_type_input" class="p-2 border border-green-300 rounded-md focus:ring-green-500 focus:border-green-500" placeholder="Type of Crop (e.g., Cotton)" required value="Cotton">
+            <input type="text" id="satellite_image_condition_input" class="p-2 border border-green-300 rounded-md focus:ring-green-500 focus:border-green-500" placeholder="Image Condition: Healthy/Moderate/Stressed" required value="Healthy">
+            <input type="text" id="insurance_status_input" class="p-2 border border-green-300 rounded-md focus:ring-green-500 focus:border-green-500" placeholder="Insurance Status: Verified/Pending/None" required value="Verified">
+        </form>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
+            <div>
+                <h3 class="font-semibold text-green-700 mb-3 border-l-2 border-green-400 pl-2">AI Satellite Image Verification (Simulated)</h3>
+                <div class="bg-white shadow-md rounded-md p-4 border border-green-200">
+
+                    <div id="upload-box" class="analysis-input-box bg-green-50 rounded-lg">
+                        <input type="file" id="real-file-input" accept="image/*" onchange="handleFileUpload()">
+                        <div id="upload-content-default" class="flex flex-col items-center justify-center pointer-events-none">
+                            <svg class="w-12 h-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            <p class="text-green-600 mt-2">Click to upload or drag and drop</p>
+                            <p class="text-sm text-green-400">PNG, JPG, or WEBP (Simulated Image Upload)</p>
+                        </div>
+                        <div id="upload-content-success" class="hidden flex-col items-center justify-center pointer-events-none">
+                            <p class="text-lg text-green-700 mt-4 font-medium">Image uploaded successfully! 🌱</p>
+                            <p id="uploaded-file-name" class="text-sm text-green-600 mt-1"></p>
+                        </div>
+                    </div>
+
+                    <button type="button" id="analyze-button" class="disabled-button w-full bg-gray-400 text-white font-semibold py-2 rounded-md mt-4 transition duration-150 shadow-lg shadow-gray-200" onclick="runAnalysis()" disabled>
+                        Analyze Farm Data
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="font-semibold text-green-700 mb-3 border-l-2 border-green-400 pl-2">Analysis Status</h3>
+                <div id="analysis-output-box" class="analysis-result-box bg-green-50 border border-green-200 flex items-center justify-center text-green-600">
+                    <p>Analysis will run after you upload an image and click "Analyze".</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="underwriting-results" class="hidden space-y-6 pt-6 border-b border-green-200 pb-6">
+        <h2 class="text-2xl font-bold text-green-700 text-center">Underwriting Results</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+            <div class="flex flex-col items-center">
+                <div class="gauge-container">
+                    <svg class="w-full h-full" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" class="gauge-background" stroke-dasharray="212 84.8" stroke-dashoffset="0"></circle>
+                        <circle cx="50" cy="50" r="45" id="gauge-arc" class="gauge-arc" stroke-dasharray="0 212" stroke-dashoffset="0"></circle>
+                    </svg>
+                    <span id="health-index-value" class="gauge-value">--</span>
+                    <span class="gauge-label">Farm Health Index</span>
+                </div>
+            </div>
+
+            <div class="md:col-span-3 space-y-3">
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-green-50 p-4 rounded-lg shadow-sm border border-green-200">
+                        <p class="text-sm font-medium text-green-600">Max Loan (Eligibility)</p>
+                        <p id="max-loan-output" class="text-2xl font-bold text-gray-800">--</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg shadow-sm border border-green-200">
+                        <p class="text-sm font-medium text-green-600">Interest Rate Band</p>
+                        <p id="interest-rate-output" class="text-2xl font-bold text-gray-800">--</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg shadow-sm border border-green-200">
+                        <p class="text-sm font-medium text-green-600">Insurance Status</p>
+                        <p id="insurance-output" class="text-xl font-bold text-gray-800">--</p>
+                    </div>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg shadow-sm border border-green-200">
+                    <p class="text-sm font-medium text-green-600">Collateral Requirement</p>
+                    <p id="collateral-output" class="text-2xl font-bold text-green-700">Minimal / Self-guarantee</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="pt-2">
+            <h3 class="text-lg font-bold text-blue-700 mb-2 border-l-4 border-blue-400 pl-2">🎯 Primary Goal Focused Details (<span id="focused-goal-title"></span>)</h3>
+            <div id="filtered-details-output" class="p-4 bg-blue-50 text-gray-800 rounded-lg border border-blue-300 font-medium space-y-3">
+                <p>Focused results for your primary goal will appear here after analysis.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="recommendation-section" class="hidden pt-6 space-y-4">
+        <h2 class="text-2xl font-bold text-green-700 text-center">Your Personalized Recommendations (Filtered to: <span id="selected-goal-text-header"></span>)</h2>
+
+        <div id="product-recommendation-list" class="space-y-3">
+            <div id="success-message" class="hidden p-4 bg-green-100 text-green-700 rounded-lg border border-green-300 font-medium">
+            </div>
+
+            <table class="min-w-full divide-y divide-gray-200 recommendation-table shadow-lg rounded-lg overflow-hidden">
+                <thead class="bg-green-50">
+                    <tr>
+                        <th>Product Type</th>
+                        <th>Recommended Provider/Scheme</th>
+                        <th>Key Terms</th>
+                        <th>Integration Method</th> <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="recommendation-table-body" class="bg-white divide-y divide-gray-100">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom Styles for Gauge and UI elements */
+    .gauge-container { width: 150px; height: 150px; position: relative; margin: 0 auto; }
+    .gauge-background, .gauge-arc { fill: none; stroke-width: 10; transition: stroke-dasharray 1s ease-in-out; }
+    .gauge-background { stroke: #d1fae5; }
+    .gauge-arc { stroke: #059669; transform: rotate(225deg); transform-origin: 50% 50%; stroke-linecap: round; }
+    .gauge-value { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2.5rem; font-weight: 700; color: #059669; }
+    .gauge-label { position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); font-size: 0.875rem; color: #4B5563; }
+    .analysis-input-box { min-height: 250px; border: 2px dashed #6EE7B7; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; position: relative; overflow: hidden; transition: border-color 0.3s, background-color 0.3s; }
+    .analysis-input-box input[type="file"] { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; z-index: 10; }
+    .analysis-input-box.active { border-color: #059669; background-color: #D1FAE5; }
+    .recommendation-table th { background-color: #ECFDF5; color: #065F46; padding: 0.75rem 1rem; text-align: left; border-bottom: 2px solid #A7F3D0; }
+    .detailed-report-section { padding: 1rem; margin-top: 1rem; border-top: 1px solid #D1FAE5; }
+    .detailed-report-section h4 { font-weight: 700; color: #059669; margin-bottom: 0.5rem; border-left: 3px solid #6EE7B7; padding-left: 0.5rem; }
+    .disabled-overlay { pointer-events: none; opacity: 0.4; }
+    .disabled-button { background-color: #9CA3AF !important; cursor: not-allowed; box-shadow: none; }
+    .verified-check { font-weight: bold; color: #059669; }
+    .unverified-cross { font-weight: bold; color: #EF4444; }
+    .product-selector input[type="radio"]:checked + label { background-color: #10B981; color: white; border-color: #059669; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3); }
+    /* Style for the integration method text */
+    .integration-tag {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        border-radius: 9999px; /* fully rounded */
+    }
+    .integration-api { background-color: #E0F2F1; color: #00796B; }
+    .integration-deeplink { background-color: #FFF3E0; color: #FF9800; }
+    .integration-appid { background-color: #E3F2FD; color: #2196F3; }
+</style>
+
+<script>
+    // DOM Elements
+    const farmSelector = document.getElementById('farm-selector');
+    const analysisInputSection = document.getElementById('analysis-input-section');
+    const analyzeButton = document.getElementById('analyze-button');
+    const recommendationSection = document.getElementById('recommendation-section');
+    const recommendationTableBody = document.getElementById('recommendation-table-body');
+    const successMessage = document.getElementById('success-message');
+    const selectedGoalTextHeader = document.getElementById('selected-goal-text-header');
+
+    const cropAreaInput = document.getElementById('crop_area');
+    const farmNameDisplay = document.getElementById('farm_name_display');
+    const selectedFarmIdInput = document.getElementById('selected_farm_id');
+
+    const analysisOutputBox = document.getElementById('analysis-output-box');
+
+    const resultsDiv = document.getElementById('underwriting-results');
+    const healthIndexValue = document.getElementById('health-index-value');
+    const gaugeArc = document.getElementById('gauge-arc');
+    const maxLoanOutput = document.getElementById('max-loan-output');
+    const interestRateOutput = document.getElementById('interest-rate-output');
+    const collateralOutput = document.getElementById('collateral-output');
+    const insuranceOutput = document.getElementById('insurance-output');
+    const filteredDetailsOutput = document.getElementById('filtered-details-output');
+    const focusedGoalTitle = document.getElementById('focused-goal-title');
+    const fileInput = document.getElementById('real-file-input');
+
+    // Analysis Simulation Inputs
+    const cropTypeInput = document.getElementById('crop_type_input');
+    const satelliteConditionInput = document.getElementById('satellite_image_condition_input');
+    const insuranceStatusInput = document.getElementById('insurance_status_input');
+
+    // Global State
+    let currentRecommendations = [];
+    let isImageUploaded = false;
+    let primaryGoal = '';
+    let fullReportData = {};
+    let selectedFarmId = null;
+
+    // Mock Data for Analysis Simulation
+    const mockImages = {
+        healthy: { adjustment: 10, factor: 'High NDVI trend (0.8+), indicating excellent crop health.' },
+        moderate: { adjustment: 0, factor: 'Moderate NDVI (0.6-0.7), indicating fair crop health.' },
+        stressed: { adjustment: -15, factor: 'Low NDVI (0.5-), indicating significant crop stress or poor growth.' }
+    };
+
+    const cropRisk = {
+        wheat: { adjustment: 5, ratePenalty: -1, summary: 'Low inherent risk and stable demand.' },
+        cotton: { adjustment: 0, ratePenalty: 0, summary: 'Moderate market risk offset by high commodity value.' },
+        grapes: { adjustment: -10, ratePenalty: 3, summary: 'High market risk and capital intensity.' },
+        // Add more crops here if needed
+        standard: { adjustment: 0, ratePenalty: 0, summary: 'Standard commodity risk.' }
+    };
+
+
+    // --- STEP 0: INITIALIZATION & FARM SELECTION ---
+
+    farmSelector.addEventListener('change', function() {
+        const selectedOption = farmSelector.options[farmSelector.selectedIndex];
+
+        if (!selectedOption.value) {
+            selectedFarmId = null;
+            analysisInputSection.classList.add('disabled-overlay');
+            analyzeButton.disabled = true;
+            return;
+        }
+
+        // 1. Update global state
+        selectedFarmId = selectedOption.value;
+        const area = parseFloat(selectedOption.dataset.area);
+
+        // 2. Populate analysis form fields (Note: crop/insurance are simulated for now)
+        selectedFarmIdInput.value = selectedFarmId;
+        farmNameDisplay.value = selectedOption.dataset.name;
+        cropAreaInput.value = area;
+
+        // 3. Enable analysis section
+        analysisInputSection.classList.remove('disabled-overlay');
+
+        // 4. Check analysis button availability
+        checkAnalysisButtonState();
+
+        // Reset results display
+        resultsDiv.classList.add('hidden');
+        recommendationSection.classList.add('hidden');
+        analysisOutputBox.innerHTML = '<p>Farm selected. Please continue to select a goal and upload the image.</p>';
+
+        analysisInputSection.scrollIntoView({ behavior: 'smooth' });
+    });
+
+
+    // --- STEP 1: GOAL SELECTION HANDLER ---
+    window.handleGoalSelection = function() {
+        const selectedGoal = document.querySelector('input[name="primary_goal"]:checked').value;
+        primaryGoal = selectedGoal;
+
+        selectedGoalTextHeader.textContent = primaryGoal;
+        focusedGoalTitle.textContent = primaryGoal;
+
+        checkAnalysisButtonState();
+
+        resultsDiv.classList.add('hidden');
+        recommendationSection.classList.add('hidden');
+        filteredDetailsOutput.innerHTML = `<p>Click "Analyze Farm Data" to see the focused results for **${primaryGoal}**.</p>`;
+    };
+
+    // --- STEP 1.1: FILE UPLOAD HANDLER ---
+    window.handleFileUpload = function() {
+        const uploadBox = document.getElementById('upload-box');
+        const uploadContentDefault = document.getElementById('upload-content-default');
+        const uploadContentSuccess = document.getElementById('upload-content-success');
+        const uploadedFileName = document.getElementById('uploaded-file-name');
+
+        const file = fileInput.files[0];
+
+        if (file) {
+            isImageUploaded = true;
+            uploadBox.classList.add('active');
+            uploadContentDefault.classList.add('hidden');
+            uploadContentSuccess.classList.remove('hidden');
+            uploadedFileName.textContent = `File: ${file.name}`;
+        } else {
+            isImageUploaded = false;
+            uploadBox.classList.remove('active');
+            uploadContentDefault.classList.remove('hidden');
+            uploadContentSuccess.classList.add('hidden');
+        }
+        checkAnalysisButtonState();
+    };
+
+    // Helper to control the main analysis button state
+    function checkAnalysisButtonState() {
+        const isReady = selectedFarmId && primaryGoal && isImageUploaded;
+
+        if (isReady) {
+            analyzeButton.disabled = false;
+            analyzeButton.classList.remove('disabled-button', 'bg-gray-400');
+            analyzeButton.classList.add('bg-green-600', 'hover:bg-green-700');
+        } else {
+            analyzeButton.disabled = true;
+            analyzeButton.classList.add('disabled-button', 'bg-gray-400');
+            analyzeButton.classList.remove('bg-green-600', 'hover:bg-green-700');
+        }
+    }
+
+
+    // Helper: Update the score gauge display
+    function updateGauge(score, color) {
+        const normalizedScore = Math.min(Math.max(score, 0), 100);
+        const totalLength = 212;
+        const dashLength = (normalizedScore / 100) * totalLength;
+
+        healthIndexValue.textContent = score;
+        gaugeArc.style.strokeDasharray = `${dashLength} ${totalLength}`;
+        gaugeArc.style.stroke = color;
+        healthIndexValue.style.color = color;
+    }
+
+    // Action Handler for product application buttons - **UPDATED FOR INTEGRATION LOGIC**
+    window.requestProduct = function(productType, provider, integrationMethod) {
+        let resultMessage = '';
+
+        // --- SIMULATED INTEGRATION LOGIC ---
+        if (integrationMethod === 'Direct API') {
+            const loanID = `LOAN-${Math.floor(Math.random() * 9000 + 1000)}`;
+            resultMessage = `<p><span class="font-bold text-lg text-green-800">Direct API (Loan) Submission ✅</span></p><p>Your verified data was pre-filled and sent to **${provider}** via API. </p><p>Reference ID: <span class="font-bold">${loanID}</span>. Expect a confirmation from the bank in 24 hours.</p>`;
+        } else if (integrationMethod === 'Deep Link/Widget') {
+            const claimURL = `https://portal.insurer.com/form?id=${selectedFarmId}`;
+            resultMessage = `<p><span class="font-bold text-lg text-green-800">Deep Link/Widget (Insurance) Generation 🔗</span></p><p>A secure link was generated to pre-fill the **${provider}** insurance form.</p><p>Action: <a href="#" onclick="alert('Simulated redirection to: ${claimURL}')" class="text-blue-600 hover:text-blue-800 underline font-bold">Click here to continue to the insurer's portal.</a> (Data pre-filled)</p>`;
+        } else if (integrationMethod === 'Application ID Generation') {
+            const applicationID = `GOVT-DBT-${Math.floor(Math.random() * 90000 + 10000)}`;
+            resultMessage = `<p><span class="font-bold text-lg text-green-800">Application ID (Govt. Fund) Generation ✅</span></p><p>Eligibility confirmed and the application package submitted to the **${provider}** gateway.</p><p>Official Tracking ID: <span class="font-bold">${applicationID}</span>. Use this ID on the external government portal for status checks.</p>`;
+        } else {
+             resultMessage = `<span class="font-bold">Success! ✅</span> Your request for ${productType} has been processed by ${provider}.`;
+        }
+        // --- END SIMULATED INTEGRATION LOGIC ---
+
+        successMessage.innerHTML = resultMessage;
+        successMessage.classList.remove('hidden');
+
+        // Disable all other options for the same product type after one is selected
+        const buttons = document.querySelectorAll(`button[data-product-type="${productType}"]`);
+        buttons.forEach(button => {
+            if (button.dataset.provider === provider) {
+                 button.innerHTML = `<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Sent`;
+                 button.classList.remove('bg-green-600', 'hover:bg-green-700', 'text-white');
+                 button.classList.add('bg-gray-400', 'text-gray-700', 'cursor-not-allowed');
+                 button.disabled = true;
+            } else {
+                 button.classList.remove('bg-green-600', 'hover:bg-green-700', 'text-white');
+                 button.classList.add('bg-gray-200', 'text-gray-500', 'cursor-not-allowed');
+                 button.disabled = true;
+            }
+        });
+
+        successMessage.scrollIntoView({ behavior: 'smooth' });
+    };
+
+
+    // --- STEP 2: MAIN ANALYSIS FUNCTION ---
+    window.runAnalysis = function() {
+        const farmId = selectedFarmIdInput.value;
+        const area = parseFloat(cropAreaInput.value);
+        const rawCropType = cropTypeInput.value.toLowerCase().trim();
+        const satelliteConditionKey = satelliteConditionInput.value.toLowerCase().trim();
+        const rawInsuranceStatus = insuranceStatusInput.value.toLowerCase().trim();
+
+        // Validation check (basic)
+        if (!farmId || !area || isNaN(area)) {
+             alert("Error: Please select a farm and ensure the area is a valid number.");
+             return;
+        }
+
+        const cropType = rawCropType;
+        const satelliteData = mockImages[satelliteConditionKey] || mockImages.moderate; // Default to moderate if condition is invalid
+        const cropRiskData = cropRisk[cropType] || cropRisk.standard; // Default to standard if crop is unrecognized
+
+        // Start loading state
+        analysisOutputBox.classList.add('flex-col');
+        analysisOutputBox.innerHTML = `
+            <svg class="animate-spin h-8 w-8 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <p class="text-green-600 ml-3 mt-2">Running AI Underwriting Model... 🚀</p>
+        `;
+        analyzeButton.disabled = true;
+
+        // Simulate API call to Flask backend
+        fetch(`/api/underwrite_loan/${farmId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ area_acres: area }) // Send only the area if needed for server validation
+        })
+        .then(response => response.json().then(data => {
+            if (!response.ok) throw new Error(data.message || "Failed to contact loan server.");
+            return data;
+        }))
+        .then(data => {
+
+            // --- FLASK DATA INTEGRATION ---
+            const maxLoanBase = data.loan_details.max_loan_amount; // e.g., 60000
+            const status = data.status; // e.g., 'Approved' or 'Denied'
+            // --- END FLASK DATA INTEGRATION ---
+
+            // --- RISK CALCULATION (Client-side Simulation for UI elements) ---
+            let baseScore = area >= 100 ? 80 : (area >= 50 ? 65 : 50);
+            let baseRatePenalty = area >= 100 ? 0 : (area >= 50 ? 2 : 4);
+
+            baseScore += cropRiskData.adjustment + satelliteData.adjustment;
+
+            let insuranceAdjustment = rawInsuranceStatus === 'verified' ? 5 : 0;
+            let insuranceColor = rawInsuranceStatus === 'verified' ? 'text-green-700' : (rawInsuranceStatus === 'pending' ? 'text-yellow-600' : 'text-red-600');
+            baseScore += insuranceAdjustment;
+
+            let score = Math.floor(Math.random() * 5 + baseScore - 2);
+            score = Math.min(Math.max(score, 40), 98);
+
+            let finalRateMin = Math.max(7.0, 8 + baseRatePenalty);
+
+            let loanPercent, collateral, gaugeColor;
+
+            if (score >= 75 && status === 'Approved') {
+                loanPercent = '100%'; collateral = 'Minimal / Self-guarantee'; gaugeColor = '#059669';
+            } else if (score >= 55 && status === 'Approved') {
+                loanPercent = '80%'; collateral = 'Partial Land Deed'; gaugeColor = '#F59E0B';
+            } else {
+                loanPercent = '0%'; collateral = 'Full Land Deed Required'; gaugeColor = '#EF4444';
+            }
+
+            // --- UI UPDATES: UNDERWRITING RESULTS ---
+            analysisOutputBox.classList.remove('flex-col', 'items-center', 'justify-content-center');
+            analysisOutputBox.innerHTML = `
+                <p class="text-lg font-semibold text-green-700">Analysis Complete! 🎉</p>
+                <p class="text-sm text-gray-600 mt-2">Results indicate a **${status}** eligibility status from Flask server.</p>
+            `;
+
+            resultsDiv.classList.remove('hidden');
+            updateGauge(score, gaugeColor);
+
+            maxLoanOutput.textContent = status === 'Approved' ? `₹${maxLoanBase.toLocaleString('en-IN')}` : '₹0';
+            interestRateOutput.textContent = status === 'Denied' ? 'N/A' : `${finalRateMin.toFixed(1)}-${Math.min(20, finalRateMin + 2).toFixed(1)}%`;
+            insuranceOutput.textContent = rawInsuranceStatus.toUpperCase();
+            insuranceOutput.className = `text-xl font-bold ${insuranceColor}`;
+            collateralOutput.textContent = collateral;
+            collateralOutput.className = `text-2xl font-bold ${gaugeColor === '#059669' ? 'text-green-700' : (gaugeColor === '#F59E0B' ? 'text-yellow-600' : 'text-red-600')}`;
+
+
+            // --- GENERATE DETAILED REPORT STRUCTURE ---
+            fullReportData = generateFullReportData(status, area, cropTypeInput.value, score, rawInsuranceStatus, satelliteData.factor, finalRateMin, loanPercent, collateral);
+
+            // Renders the content for the selected goal.
+            renderFilteredDetails(primaryGoal);
+            // ---------------------------------------------------
+
+
+            // --- 4. GENERATE AND RENDER FILTERED RECOMMENDATIONS ---
+            currentRecommendations = generateAllRecommendations(status, area, cropType, score, rawInsuranceStatus);
+            renderProductRecommendations(primaryGoal);
+
+        })
+        .catch(error => {
+            console.error('Loan Analysis Error:', error);
+            analysisOutputBox.innerHTML = `<p class="text-lg font-semibold text-red-600">Error: ${error.message}</p><p class="text-sm text-gray-600 mt-2">Could not complete underwriting process.</p>`;
+            resultsDiv.classList.add('hidden');
+            recommendationSection.classList.add('hidden');
+        })
+        .finally(() => {
+            analyzeButton.disabled = false;
+            analyzeButton.textContent = 'Re-Analyze Farm Data';
+            analyzeButton.classList.add('bg-green-600', 'hover:bg-green-700');
+            analyzeButton.classList.remove('disabled-button', 'bg-gray-400');
+            recommendationSection.scrollIntoView({ behavior: 'smooth' });
+        });
+    };
+
+    // Function to create the raw data object with A, B, C content
+    function generateFullReportData(status, area, cropType, score, rawInsuranceStatus, imageFactor, rateMin, loanPercent, collateral) {
+
+        const isApproved = status.includes('Approved');
+        const eligibilityColor = isApproved ? 'text-green-600' : 'text-red-600';
+
+        const summary = `<p class="text-lg font-semibold text-gray-800">Overall AI Risk Summary: <span class="${eligibilityColor}">${status}</span></p>
+                        <p class="text-sm text-gray-600 mb-4">Farm Health Index: **${score}** (${imageFactor}).</p>
+                        <hr class="border-green-300">`;
+
+
+        // A. LOAN DETAILS
+        const loanDetails = `
+            <div class="detailed-report-section space-y-2">
+                <h4 class="text-xl font-bold text-green-700">A. LOAN DETAILS 🏦</h4>
+                <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+                    <li><strong>Eligible Loan Type:</strong> Kisan Credit Card (KCC) Loan / ${area > 100 ? 'Equipment Loan' : 'Crop Production Loan'}</li>
+                    <li><strong>Predicted Eligibility:</strong> <span class="${eligibilityColor} font-bold">${status}</span> (Based on area: ${area} Acres & Health Index: ${score})</li>
+                    <li><strong>Estimated Loan Amount Range (₹):</strong> ${isApproved ? `₹${(area * 10000).toLocaleString('en-IN')} - ₹${(area * 25000).toLocaleString('en-IN')}` : '₹0 (Not currently eligible)'}</li>
+                    <li><strong>Integration Method:</strong> Direct API Submission to Bank/NBFC partner (Setu/Decentro channel)</li>
+                </ul>
+            </div>`;
+
+        // B. INSURANCE DETAILS
+        const insuranceDetails = `
+            <div class="detailed-report-section space-y-2">
+                <h4 class="text-xl font-bold text-green-700">B. INSURANCE DETAILS 🛡️</h4>
+                <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+                    <li><strong>Applicable Scheme:</strong> Pradhan Mantri Fasal Bima Yojana (PMFBY)</li>
+                    <li><strong>Coverage Type:</strong> Comprehensive - Crop Loss, Disaster, and Weather-based risks.</li>
+                    <li><strong>Eligibility:</strong> <span class="${eligibilityColor} font-bold">${rawInsuranceStatus === 'verified' ? 'Verified' : (isApproved ? 'Qualified' : 'Partially Qualified')}</span></li>
+                    <li><strong>Integration Method:</strong> Deep Link/Widget redirection to Insurer's pre-filled portal.</li>
+                </ul>
+            </div>`;
+
+        // C. GOVERNMENT SCHEME DETAILS
+        const schemeDetails = `
+            <div class="detailed-report-section space-y-3">
+                <h4 class="text-xl font-bold text-green-700">C. GOVERNMENT SCHEME DETAILS 💰</h4>
+                <ul class="list-disc list-inside space-y-2 text-sm text-gray-700">
+                    <li>
+                        <p class="font-semibold">PM-KISAN Income Support Scheme</p>
+                        <p class="ml-4 text-xs">Benefit: Direct income support (₹6,000/year). Integration: Application ID Generation for tracking.</p>
+                    </li>
+                    <li>
+                        <p class="font-semibold">RKVY (Rashtriya Krishi Vikas Yojana)</p>
+                        <p class="ml-4 text-xs">Benefit: Subsidy for new equipment or irrigation. Integration: Application ID Generation for tracking.</p>
+                    </li>
+                </ul>
+            </div>`;
+
+        return {
+            summary: summary,
+            loan: loanDetails,
+            insurance: insuranceDetails,
+            schemes: schemeDetails
+        };
+    }
+
+    // **FUNCTION TO FILTER OUTPUT**
+    window.renderFilteredDetails = function(goal) {
+        let content;
+        let goalTitle = '';
+
+        if (goal === 'Loan') {
+            content = fullReportData.loan;
+            goalTitle = 'Loan Details';
+        } else if (goal === 'Insurance') {
+            content = fullReportData.insurance;
+            goalTitle = 'Insurance Details';
+        } else if (goal === 'Govt. Fund') {
+            content = fullReportData.schemes;
+            goalTitle = 'Government Fund Details';
+        } else {
+            content = '<p class="text-red-500 font-bold">Please select a primary goal to see the focused details.</p>';
+        }
+
+        filteredDetailsOutput.innerHTML = fullReportData.summary + content;
+        focusedGoalTitle.textContent = goalTitle;
+    }
+
+    // Function to generate all possible recommendations
+    function generateAllRecommendations(status, area, cropType, score, rawInsuranceStatus) {
+        let allRecs = [];
+        const isApproved = status.includes('Approved');
+        const isHighScore = score >= 75;
+
+        // 1. LOAN RECOMMENDATIONS (Direct API)
+        if (isApproved) {
+            allRecs.push({ type: 'Loan', provider: 'AgriBank India (HDFC API)', terms: isHighScore ? 'Best Rate: 7.5% - Up to ₹50 Lakh' : 'Standard Rate: 9.0% - Up to ₹25 Lakh', action: 'Apply Now', integration: 'Direct API' });
+            allRecs.push({ type: 'Loan', provider: 'FarmCredit Union', terms: isHighScore ? '8.0% Rate - Requires digital KYC' : '10.5% Rate - Quick 48hr approval', action: 'Request Loan', integration: 'Direct API' });
+        } else {
+             allRecs.push({ type: 'Loan', provider: 'None Matched', terms: 'Loan Denied. Score too low (< 55).', action: 'Risk Mitigation Plan', integration: 'N/A' });
+        }
+
+        // 2. INSURANCE RECOMMENDATIONS (Deep Link/Widget)
+        if (rawInsuranceStatus !== 'verified') {
+            allRecs.push({ type: 'Insurance', provider: 'GreenLeaf Insurance (PMFBY)', terms: isHighScore ? `Premium Discount for ${cropType.toUpperCase()} farm!` : 'Mandatory cover required for loan approval.', action: 'Verify/Purchase', integration: 'Deep Link/Widget' });
+        } else {
+             allRecs.push({ type: 'Insurance', provider: 'Status Verified (PMFBY)', terms: 'Coverage is active and verified.', action: 'Active', integration: 'N/A' });
+        }
+        allRecs.push({ type: 'Insurance', provider: 'Premium Weather Risk Cover', terms: 'Drought/Flood protection add-on.', action: 'Buy Add-on', integration: 'Deep Link/Widget' });
+
+
+        // 3. GOVERNMENT FUND/SUBSIDY RECOMMENDATIONS (Application ID Generation)
+        if (area > 100) {
+             allRecs.push({ type: 'Govt. Fund', provider: 'National Farm Size Grant (NABARD)', terms: 'Eligible for large farm infrastructure grant.', action: 'Apply Now', integration: 'Application ID Generation' });
+        }
+        allRecs.push({ type: 'Govt. Fund', provider: 'RKVY Mach. Subsidy', terms: 'Subsidy for new equipment purchase.', action: 'Apply Now', integration: 'Application ID Generation' });
+
+        return allRecs;
+    }
+
+
+    // --- STEP 3: RENDER FILTERED RECOMMENDATIONS ---
+    window.renderProductRecommendations = function(selectedProductType) {
+
+        recommendationSection.classList.remove('hidden');
+        successMessage.classList.add('hidden');
+
+        const filteredRecs = currentRecommendations.filter(rec => rec.type === selectedProductType);
+
+        recommendationTableBody.innerHTML = filteredRecs.map(rec => {
+            const isDenied = rec.provider.includes('Denied') || rec.action === 'Risk Mitigation Plan';
+
+            let buttonClass = 'bg-green-600 text-white hover:bg-green-700';
+            if (isDenied || rec.action === 'Active' || rec.action === 'Risk Mitigation Plan') {
+                buttonClass = 'bg-gray-200 text-gray-500 cursor-not-allowed';
+            }
+
+            let tagClass = '';
+            if (rec.integration === 'Direct API') tagClass = 'integration-api';
+            else if (rec.integration === 'Deep Link/Widget') tagClass = 'integration-deeplink';
+            else if (rec.integration === 'Application ID Generation') tagClass = 'integration-appid';
+
+            return `
+                <tr class="${isDenied ? 'bg-red-50' : 'hover:bg-green-50'}">
+                    <td class="font-semibold text-green-800">${rec.type}</td>
+                    <td>${rec.provider}</td>
+                    <td class="text-sm">${rec.terms}</td>
+                    <td>
+                        <span class="integration-tag ${tagClass}">${rec.integration}</span>
+                    </td>
+                    <td>
+                        <button
+                            class="flex items-center justify-center py-2 px-4 rounded-md font-medium text-xs transition duration-150 ${buttonClass}"
+                            onclick="${rec.action !== 'Active' && rec.action !== 'Risk Mitigation Plan' ? `requestProduct('${rec.type}', '${rec.provider}', '${rec.integration}')` : ''}"
+                            data-product-type="${rec.type}"
+                            data-provider="${rec.provider}"
+                            data-integration="${rec.integration}"
+                            ${isDenied || rec.action === 'Active' || rec.action === 'Risk Mitigation Plan' ? 'disabled' : ''}
+                        >
+                            ${rec.action === 'Active' ? 'Active' : rec.action}
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // --- Initial Load ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // Disable the analysis section initially until a farm is selected.
+        analysisInputSection.classList.add('disabled-overlay');
+    });
+</script>
+{% endblock %}

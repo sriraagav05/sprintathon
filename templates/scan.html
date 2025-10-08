@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Field{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="text-center mb-12">
+        <h1 class="text-4xl lg:text-5xl font-extrabold text-gray-800">📸 AI Crop Scanner</h1>
+        <p class="mt-4 text-lg text-gray-600">Get an instant, AI-powered health analysis for your crops.</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div id="scan-form-card">
+            <div class="bg-white p-8 rounded-xl shadow-2xl border-t-4 border-blue-500 h-full">
+                <h2 class="text-2xl font-extrabold text-gray-800 mb-6">1. Provide Scan Details</h2>
+                <form id="scan-form">
+                    <div class="space-y-6">
+                        <div>
+                            <label for="crop_id" class="block text-sm font-medium text-gray-700 mb-1">Select Crop to Scan</label>
+                            <select id="crop_id" name="crop_id" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                                {% if crops %}
+                                    {% for crop in crops %}
+                                        <option value="{{ crop.id }}">{{ crop.name }} (ID: {{ crop.id }})</option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option value="" disabled selected>No crops available. Please add a crop on the dashboard first.</option>
+                                {% endif %}
+                            </select>
+                            {% if not crops %}
+                                <p class="text-sm text-red-500 mt-2">You must plant a crop before running the scanner!</p>
+                            {% endif %}
+                        </div>
+
+                        <div>
+                            <label for="soil_type" class="block text-sm font-medium text-gray-700 mb-1">Soil Type</label>
+                            <select id="soil_type" name="soil_type" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                                <option value="Standard">Standard</option>
+                                <option value="Loamy">Loamy</option>
+                                <option value="Clay">Clay</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="plant_photo" class="block text-sm font-medium text-gray-700 mb-1">Upload Plant Photo (JPG/PNG)</label>
+                            <input type="file" id="plant_photo" name="plant_photo" accept="image/jpeg, image/png" required class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        </div>
+                    </div>
+
+                    <div class="mt-8">
+                        <button type="submit" id="analyze-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 transition duration-150 transform hover:scale-105 flex items-center justify-center" {% if not crops %}disabled{% endif %}>
+                            <span id="btn-spinner" class="hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></span>
+                            <span id="btn-text">Analyze Now</span>
+                        </button>
+                    </div>
+                    <div id="status-message" class="mt-4 p-3 rounded-lg text-center hidden"></div>
+                </form>
+            </div>
+        </div>
+
+        <div id="results-area" class="{% if not crops %}opacity-50 pointer-events-none{% endif %}">
+            <div class="bg-white p-8 rounded-xl shadow-2xl border-t-4 border-green-500 h-full">
+                <h2 class="text-2xl font-extrabold text-gray-800 mb-6">2. Analysis Report</h2>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-bold text-gray-700 mb-2">Uploaded Image:</h3>
+                    <img id="image-preview" src="https://placehold.co/400x200/cccccc/000000?text=Image+Preview" alt="Uploaded Plant" class="rounded-lg shadow-md max-h-64 mx-auto">
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="font-bold text-gray-600">Disease Detected:</h4>
+                        <p id="result-disease" class="text-xl font-semibold text-gray-600 p-2 bg-gray-50 rounded">Awaiting Analysis...</p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-600">Is it Curable?</h4>
+                        <p id="result-curable" class="text-lg font-medium text-gray-800 p-2 bg-gray-50 rounded"></p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-600">Recommended Remedy:</h4>
+                        <p id="result-remedy" class="text-gray-700 whitespace-pre-wrap p-3 bg-gray-50 rounded-md border"></p>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-600">Prevention Plan:</h4>
+                        <p id="result-prevention" class="text-gray-700 whitespace-pre-wrap p-3 bg-gray-50 rounded-md border"></p>
+                    </div>
+                </div>
+
+                <div class="mt-8">
+                    <button id="save-btn" class="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 transition duration-150 flex items-center justify-center disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        <span id="save-spinner" class="hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></span>
+                        <span id="save-btn-text">Save Results to My Crop</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const scanForm = document.getElementById('scan-form');
+    const analyzeBtn = document.getElementById('analyze-btn');
+    const btnText = document.getElementById('btn-text');
+    const btnSpinner = document.getElementById('btn-spinner');
+    const statusMessage = document.getElementById('status-message');
+
+    const imagePreview = document.getElementById('image-preview');
+    const resultDisease = document.getElementById('result-disease');
+    const resultCurable = document.getElementById('result-curable');
+    const resultRemedy = document.getElementById('result-remedy');
+    const resultPrevention = document.getElementById('result-prevention');
+    const saveBtn = document.getElementById('save-btn');
+    const saveBtnText = document.getElementById('save-btn-text');
+    const saveSpinner = document.getElementById('save-spinner');
+
+    let analysisData = null; // To store the result from the AI
+
+    // Helper to display dynamic status messages
+    function displayStatus(message, type = 'info') {
+        statusMessage.textContent = message;
+        statusMessage.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-blue-100', 'text-blue-700', 'bg-green-100', 'text-green-700');
+
+        if (type === 'error') {
+            statusMessage.classList.add('bg-red-100', 'text-red-700');
+        } else if (type === 'success') {
+            statusMessage.classList.add('bg-green-100', 'text-green-700');
+        } else {
+            statusMessage.classList.add('bg-blue-100', 'text-blue-700');
+        }
+    }
+
+    // Handle the analysis form submission
+    scanForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const cropSelect = document.getElementById('crop_id');
+        if (!cropSelect.value) {
+            displayStatus('Please select a crop to analyze.', 'error');
+            return;
+        }
+
+        // --- 1. Prepare for API call ---
+        const formData = new FormData(scanForm);
+        const photoFile = formData.get('plant_photo');
+
+        if (photoFile) {
+            imagePreview.src = URL.createObjectURL(photoFile);
+        }
+
+        // Set UI to loading state
+        analyzeBtn.disabled = true;
+        btnSpinner.classList.remove('hidden');
+        btnText.textContent = 'Analyzing...';
+        saveBtn.disabled = true;
+        displayStatus('Running AI Analysis on image...', 'info');
+
+        // --- 2. Call the AI analysis API ---
+        fetch('/api/analyze_plant_photo', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                // Handle HTTP errors like 400 or 500
+                return response.json().then(err => {
+                    throw new Error(err.error || `Server error (${response.status})`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // --- 3. Display the results ---
+            analysisData = data; // Store data for the save button
+
+            // Determine colors
+            const isDisease = data.disease && data.disease !== 'None';
+            const diseaseClass = isDisease ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50';
+
+            resultDisease.className = `text-xl font-semibold p-2 rounded ${diseaseClass}`;
+            resultDisease.textContent = data.disease || 'None Detected';
+
+            resultCurable.textContent = data.is_curable ? 'Yes (Treatable)' : 'No (Requires Severe Action)';
+            resultRemedy.textContent = data.remedy || 'N/A';
+            resultPrevention.textContent = data.prevention || 'N/A';
+
+            document.getElementById('results-area').classList.remove('opacity-50', 'pointer-events-none');
+
+            if (isDisease) {
+                displayStatus(`Analysis Complete! Disease detected: ${data.disease}`, 'error');
+            } else {
+                displayStatus('Analysis Complete! Plant is healthy.', 'success');
+            }
+            saveBtn.disabled = false; // Enable the save button
+        })
+        .catch(error => {
+            console.error('Analysis Error:', error);
+            displayStatus(`Analysis failed: ${error.message}. Please check console for details.`, 'error');
+
+            // Clear or reset results on error
+            resultDisease.textContent = 'Error during analysis.';
+            resultCurable.textContent = 'N/A';
+            resultRemedy.textContent = 'N/A';
+            resultPrevention.textContent = 'N/A';
+        })
+        .finally(() => {
+            // --- 4. Reset UI after call ---
+            analyzeBtn.disabled = false;
+            btnSpinner.classList.add('hidden');
+            btnText.textContent = 'Analyze Now';
+        });
+    });
+
+    // Handle the "Save Results" button click
+    saveBtn.addEventListener('click', function() {
+        if (!analysisData) {
+            displayStatus('No analysis data to save.', 'error');
+            return;
+        }
+
+        // Set UI to saving state
+        saveBtn.disabled = true;
+        saveSpinner.classList.remove('hidden');
+        saveBtnText.textContent = 'Saving...';
+        displayStatus('Saving results to database...', 'info');
+
+        const cropId = document.getElementById('crop_id').value;
+        const soilType = document.getElementById('soil_type').value;
+
+        // Note: The /api/save_scan_result endpoint expects JSON, including the remedy field
+        const payload = {
+            crop_id: cropId,
+            soil_type: soilType,
+            disease: analysisData.disease,
+            remedy: analysisData.remedy
+        };
+
+        // Call the save result API
+        fetch('/api/save_scan_result', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => {
+            if (!response.ok) {
+                 return response.json().then(err => { throw new Error(err.error || `Server error (${response.status})`); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // On success, redirect to the dashboard where a flash message will appear
+            window.location.href = '/dashboard';
+        })
+        .catch(error => {
+            console.error('Save Error:', error);
+            displayStatus(`Failed to save results: ${error.message}`, 'error');
+            // Reset UI on error
+            saveBtn.disabled = false;
+            saveSpinner.classList.add('hidden');
+            saveBtnText.textContent = 'Save Results to My Crop';
+        });
+    });
+});
+</script>
+{% endblock %}

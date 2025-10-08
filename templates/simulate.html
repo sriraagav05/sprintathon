@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+
+{% block title %}Interactive Simulator{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-6xl mx-auto p-4 md:p-8">
+    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div class="p-6 border-b border-gray-200">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Crop Growth Simulator</h1>
+            <p class="text-gray-500 mt-1">Select a crop and advance the simulated days to see its growth. The visualizer updates instantly.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 p-6 md:p-8">
+
+            <!-- Main Visualization Area (Dynamic CSS Plant) -->
+            <div class="lg:col-span-8">
+                <div class="flex flex-col h-full">
+
+                    <!-- Crop Selector (Connected to Flask Backend) -->
+                    <div class="mb-6">
+                        <label for="crop-select" class="block text-sm font-medium text-gray-700 mb-2">Select Crop:</label>
+                        <select id="crop-select" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+                            <option value="" disabled selected>Choose a crop to simulate...</option>
+                            {% for crop in crops %}
+                                <option value="{{ crop.id }}" data-stage="{{ crop.growth_stage }}" data-days="{{ crop.simulated_days }}" data-soil="{{ crop.soil_type | default('Standard') }}"
+                                    {% if crop.growth_stage == 'Harvest' and crop.simulated_days > 0 %}disabled class="bg-gray-100 text-gray-500"{% endif %}
+                                    {% if crop.id == pre_select_id %}selected{% endif %}>
+                                    {{ crop.name }} (Simulated Stage: {{ crop.growth_stage }} / Days: {{ crop.simulated_days }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <p id="harvest-warning" class="text-sm text-red-500 mt-2 hidden">This crop is harvested and simulation is restricted.</p>
+                    </div>
+
+                    <!-- CSS Plant Visualization Container -->
+                    <div class="flex-grow flex items-center justify-center bg-gray-100 rounded-xl p-4 min-h-[300px] overflow-hidden">
+                        <div id="plant-visualizer" class="relative w-48 h-48 sm:w-64 sm:h-64 flex justify-center items-end">
+                            <!-- Soil Base -->
+                            <div id="soil-base" class="w-full h-1/4 bg-amber-700 rounded-b-xl absolute bottom-0 shadow-inner"></div>
+
+                            <!-- Plant Stem -->
+                            <div id="plant-stem" class="w-2 bg-green-700 absolute bottom-0 transition-all duration-700 origin-bottom"></div>
+
+                            <!-- Plant Head (Leaf/Flower/Fruit) -->
+                            <div id="plant-head" class="w-4 h-4 bg-green-500 absolute transition-all duration-700"></div>
+
+                            <!-- "Select Crop" Placeholder Text -->
+                            <div id="plant-placeholder" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg pointer-events-none">Select Crop</div>
+                        </div>
+                    </div>
+
+                    <!-- Simulation Controls -->
+                    <form id="simulate-form" class="mt-8">
+                        <div>
+                            <label for="days-slider" class="block text-sm font-medium text-gray-700 mb-2">
+                                Change Simulation Time:
+                                <span id="slider-value" class="font-bold text-xl text-indigo-600 ml-2">1</span> days
+                            </label>
+                            <input type="range" min="1" max="10" value="1" step="1" id="days-slider" name="days_increment" class="slider">
+
+                            <!-- Static labels matching backend stages (5 points) -->
+                            <div id="stage-labels" class="flex justify-between text-xs sm:text-sm text-gray-500 mt-2 px-1">
+                                <span class="flex-1 text-center">Seed</span>
+                                <span class="flex-1 text-center">Sprout</span>
+                                <span class="flex-1 text-center">Plant</span>
+                                <span class="flex-1 text-center">Flowering</span>
+                                <span class="flex-1 text-center">Harvest</span>
+                            </div>
+                        </div>
+
+                        <button type="button" onclick="submitSimulation()" class="w-full mt-6 bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-xl hover:bg-indigo-700 transition duration-150 transform hover:scale-105" disabled>
+                            ⏩ Run Simulation
+                        </button>
+                        <div id="sim-message" class="mt-4 text-center p-3 rounded-lg hidden"></div>
+                    </form>
+
+                </div>
+            </div>
+
+            <!-- Sidebar with Indicators (Static/Visual) -->
+            <div class="lg:col-span-4 bg-gray-50 rounded-xl p-6">
+                <h2 class="text-xl font-semibold mb-6 text-gray-900">Current Field Status</h2>
+                <div class="space-y-6">
+
+                    <!-- Simulated Days Counter -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-base font-medium text-gray-700">Simulated Days</span>
+                            <span id="simulated-days-display" class="text-lg font-bold text-indigo-700">0</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Total days simulated in the game model.</p>
+                    </div>
+
+                    <!-- Health Indicator (Dynamic based on selected crop's status) -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-base font-medium text-gray-700">Crop Health (Status)</span>
+                            <span id="health-status-text" class="text-sm font-medium text-gray-500">Select Crop</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div id="health-bar" class="h-2.5 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Soil Type -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-base font-medium text-gray-700">Soil Type</span>
+                            <span id="soil-type-display" class="text-sm font-medium text-green-700">Standard</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Affects growth rate (Loamy: +20%, Clay: -20%).</p>
+                    </div>
+
+                    <!-- Current Stage Display -->
+                    <div class="pt-4 mt-4 border-t border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900">Current Simulated Stage</h3>
+                        <p id="current-stage-text" class="text-indigo-600 text-2xl font-bold mt-2">N/A</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom styles for the range slider provided by the user */
+    .slider {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 8px;
+        border-radius: 5px;
+        background: #d3d3d3;
+        outline: none;
+        opacity: 0.7;
+        -webkit-transition: .2s;
+        transition: opacity .2s;
+    }
+
+    .slider:hover {
+        opacity: 1;
+    }
+
+    .slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #2563eb;
+        cursor: pointer;
+        border: 4px solid #fff;
+        box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+
+    .slider::-moz-range-thumb {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #2563eb;
+        cursor: pointer;
+        border: 4px solid #fff;
+        box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+
+    /* --- New CSS for Dynamic Plant Visualizer --- */
+
+    /* Positioning the stem relative to the soil base */
+    #plant-stem {
+        transition-property: height, background-color, transform;
+        transform: translate(0, 0); /* Ensure translate is defined */
+        height: 0;
+        bottom: 25%; /* Start from the soil line */
+    }
+    /* Positioning the head on top of the stem */
+    #plant-head {
+        transition-property: bottom, background-color, transform;
+        transform: translate(0, 0); /* Ensure translate is defined */
+        bottom: 25%; /* Start from the soil line */
+        border-radius: 50%;
+        width: 4px;
+        height: 4px;
+    }
+
+    /* --- STAGE CLASSES --- */
+
+    /* Seed (Hidden / Tiny sprout) */
+    .stage-Seed #plant-stem { height: 1%; }
+    .stage-Seed #plant-head { width: 4px; height: 4px; bottom: calc(25% + 1%); background-color: #6d6d6d; }
+
+    /* Sprout (Small green growth) */
+    .stage-Sprout #plant-stem { height: 10%; background-color: #4CAF50; }
+    .stage-Sprout #plant-head { width: 6px; height: 10px; border-radius: 50% 50% 0 0; bottom: calc(25% + 10%); background-color: #8BC34A; }
+
+    /* Plant (Mid-level stem and foliage) */
+    .stage-Plant #plant-stem { height: 35%; background-color: #388E3C; }
+    .stage-Plant #plant-head { width: 20px; height: 20px; border-radius: 50%; bottom: calc(25% + 35%); background-color: #4CAF50; }
+
+    /* Flowering (Tall stem, flower color head) */
+    .stage-Flowering #plant-stem { height: 60%; background-color: #2E7D32; }
+    .stage-Flowering #plant-head { width: 24px; height: 24px; border-radius: 50%; bottom: calc(25% + 60%); background-color: #FFEB3B; /* Yellow flower */ }
+
+    /* Harvest (Full height, brown/yellow color) */
+    .stage-Harvest #plant-stem { height: 75%; background-color: #A1887F; /* Brown/dry stem */ }
+    .stage-Harvest #plant-head { width: 30px; height: 30px; border-radius: 50%; bottom: calc(25% + 75%); background-color: #FFC107; /* Golden harvest */ }
+
+    /* --- STATUS CLASSES (Overrides for Disease) --- */
+
+    .status-Red #plant-stem,
+    .status-Red #plant-head {
+        background-color: #D32F2F !important; /* Critical Red */
+    }
+
+    .status-Yellow #plant-stem,
+    .status-Yellow #plant-head {
+        background-color: #FF9800 !important; /* Warning Orange */
+    }
+
+</style>
+
+<script>
+    // --- VISUAL DATA MAPPING ---
+    // Maps backend stages to classes (no images needed now)
+    const visualizationStages = {
+        'Seed': 'Seed',
+        'Sprout': 'Sprout',
+        'Plant': 'Plant',
+        'Flowering': 'Flowering',
+        'Harvest': 'Harvest',
+        'DISEASED': 'Seed', // Fallback
+        'N/A': 'N/A'
+    };
+
+    // Maps backend status to visualization colors
+    const healthMapping = {
+        'Green': { text: 'Healthy', color: 'bg-green-600', width: '100%' },
+        'Yellow': { text: 'Warning (Nearing Harvest)', color: 'bg-yellow-500', width: '70%' },
+        'Red': { text: 'Critical (Disease/Halted)', color: 'bg-red-600', width: '40%' }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM Elements ---
+        const cropSelect = document.getElementById('crop-select');
+        const daysSlider = document.getElementById('days-slider');
+        const sliderValueSpan = document.getElementById('slider-value');
+        const plantVisualizer = document.getElementById('plant-visualizer'); // New element
+        const plantPlaceholder = document.getElementById('plant-placeholder');
+        const currentStageText = document.getElementById('current-stage-text');
+        const simulatedDaysDisplay = document.getElementById('simulated-days-display');
+        const healthStatusText = document.getElementById('health-status-text');
+        const healthBar = document.getElementById('health-bar');
+        const simulateButton = document.querySelector('#simulate-form button');
+        const harvestWarning = document.getElementById('harvest-warning');
+        const simMessage = document.getElementById('sim-message');
+
+        // --- State ---
+        let selectedCropData = null;
+
+        // --- Event Handlers ---
+
+        // 1. Update slider value display
+        daysSlider.addEventListener('input', () => {
+            sliderValueSpan.textContent = daysSlider.value;
+            checkSimulationAbility();
+        });
+
+        // 2. Handle crop selection change
+        cropSelect.addEventListener('change', () => {
+            const selectedOption = cropSelect.options[cropSelect.selectedIndex];
+
+            if (!selectedOption.value) {
+                selectedCropData = null;
+                updateVisualization('N/A', 0, 'Standard', 'Green');
+                simulateButton.disabled = true;
+                simMessage.classList.add('hidden');
+                plantPlaceholder.classList.remove('hidden'); // Show placeholder
+                return;
+            }
+            plantPlaceholder.classList.add('hidden'); // Hide placeholder
+
+            // Extract data from the selected crop option
+            selectedCropData = {
+                id: selectedOption.value,
+                stage: selectedOption.dataset.stage,
+                days: parseInt(selectedOption.dataset.days),
+                status: 'Green', // Default, will update dynamically based on stage/disease
+                soil: selectedOption.dataset.soil || 'Standard'
+            };
+
+            // Temporary logic to derive status for immediate display (based on backend logic)
+            let statusDisplay = selectedOption.dataset.status || 'Green';
+            if (selectedCropData.stage !== 'Harvest' && selectedCropData.days > 45) {
+                 statusDisplay = 'Yellow'; // Simple approximation of Yellow status threshold
+            }
+
+            updateVisualization(selectedCropData.stage, selectedCropData.days, selectedCropData.soil, statusDisplay);
+            checkSimulationAbility();
+            simMessage.classList.add('hidden'); // Clear previous messages
+        });
+
+        // 3. Update visualization based on crop state (Now purely CSS based)
+        function updateVisualization(stage, days, soil, status) {
+            const stageClass = visualizationStages[stage] || 'N/A';
+            const health = healthMapping[status] || healthMapping['Green'];
+
+            // Clear existing stage and status classes
+            plantVisualizer.className = 'relative w-48 h-48 sm:w-64 sm:h-64 flex justify-center items-end';
+
+            // Apply new stage class
+            if (stageClass !== 'N/A') {
+                plantVisualizer.classList.add(`stage-${stageClass}`);
+            }
+
+            // Apply status class (Red/Yellow overrides green stage colors)
+            if (status === 'Red') {
+                 plantVisualizer.classList.add('status-Red');
+            } else if (status === 'Yellow') {
+                 plantVisualizer.classList.add('status-Yellow');
+            }
+
+            // Update Sidebar
+            currentStageText.textContent = stage;
+            simulatedDaysDisplay.textContent = days.toLocaleString();
+            healthStatusText.textContent = health.text;
+            document.getElementById('soil-type-display').textContent = soil;
+
+            // Update Health Bar
+            healthBar.className = `h-2.5 rounded-full ${health.color}`;
+            healthBar.style.width = health.width;
+        }
+
+        // 4. Check if simulation button should be enabled
+        function checkSimulationAbility() {
+            if (!selectedCropData) {
+                simulateButton.disabled = true;
+                return;
+            }
+
+            const isHarvested = selectedCropData.stage === 'Harvest';
+            const sliderValue = parseInt(daysSlider.value);
+
+            // Check Harvest warning for forward movement
+            if (isHarvested && sliderValue > 0) {
+                 harvestWarning.classList.remove('hidden');
+                 simulateButton.disabled = true;
+            } else {
+                 harvestWarning.classList.add('hidden');
+                 simulateButton.disabled = sliderValue < 1; // Only enable if slider is 1 or more
+            }
+        }
+
+        // 5. Submit Simulation (Forward Growth)
+        window.submitSimulation = function() {
+            const cropId = cropSelect.value;
+            const daysIncrement = parseInt(daysSlider.value);
+            const selectedOption = cropSelect.options[cropSelect.selectedIndex];
+            const cropName = selectedOption.textContent.split('(')[0].trim(); // Extract name before the parenthesis
+
+            // Disable button and show loading state
+            simulateButton.disabled = true;
+            simMessage.className = 'mt-4 text-center p-3 rounded-lg bg-blue-100 text-blue-700 block';
+            simMessage.innerHTML = `Simulating ${daysIncrement} days...`;
+
+            const formData = new FormData();
+            formData.append('days_increment', daysIncrement);
+
+            fetch(`/simulate/${cropId}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                let statusVis = 'Green';
+
+                // Determine the status from the API message/body
+                if (body.message.includes('Growth halted') || body.message.includes('regressed')) {
+                    statusVis = 'Red'; // Set to Red if growth is halted by disease
+                } else if (parseInt(body.new_days) > 45) {
+                    statusVis = 'Yellow';
+                }
+
+                if (status !== 200) {
+                     simMessage.className = 'mt-4 text-center p-3 rounded-lg bg-red-100 text-red-700 block';
+                     simMessage.innerHTML = `Error: ${body.message || 'Unknown Error'}`;
+                } else {
+                    // Update main success message
+                    simMessage.innerHTML = `<p class="font-bold mb-1">Simulation Complete!</p>${body.message}`;
+
+                    // --- Update UI on the same page ---
+                    if (selectedOption) {
+                        // Update data attributes
+                        selectedOption.dataset.stage = body.new_stage;
+                        selectedOption.dataset.days = body.new_days;
+
+                        // Update the visible text in the dropdown
+                        selectedOption.textContent = `${cropName} (Simulated Stage: ${body.new_stage} / Days: ${body.new_days})`;
+
+                        // Update the visualizer display (CSS Plant, health bar, text)
+                        updateVisualization(body.new_stage, parseInt(body.new_days), document.getElementById('soil-type-display').textContent, statusVis);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+                simMessage.className = 'mt-4 text-center p-3 rounded-lg bg-red-100 text-red-700 block';
+                simMessage.textContent = `Error: Network failed to reach server. ${error.message}`;
+            })
+            .finally(() => {
+                simulateButton.disabled = false;
+                daysSlider.value = 1; // Reset slider to default
+                sliderValueSpan.textContent = 1;
+                checkSimulationAbility();
+            });
+        }
+
+        // --- Initial Load ---
+        daysSlider.value = 1; // Reset slider to default
+        sliderValueSpan.textContent = 1;
+
+        if (cropSelect.value) {
+            // Manually trigger the change event if a crop was pre-selected via URL
+            cropSelect.dispatchEvent(new Event('change'));
+        } else {
+             // Initial status update for unselected state
+            updateVisualization('N/A', 0, 'Standard', 'Green');
+        }
+    });
+</script>
+{% endblock %}
